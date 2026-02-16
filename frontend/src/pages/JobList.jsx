@@ -94,7 +94,10 @@ export default function JobList() {
               <tr>
                 <th className="px-4 py-3 text-sm font-medium text-gray-600">Company</th>
                 <th className="px-4 py-3 text-sm font-medium text-gray-600">Title</th>
+                <th className="px-4 py-3 text-sm font-medium text-gray-600">Location</th>
+                <th className="px-4 py-3 text-sm font-medium text-gray-600">Salary</th>
                 <th className="px-4 py-3 text-sm font-medium text-gray-600">Status</th>
+                <th className="px-4 py-3 text-sm font-medium text-gray-600">Tags</th>
                 <th className="px-4 py-3 text-sm font-medium text-gray-600">Added</th>
                 <th className="px-4 py-3 text-sm font-medium text-gray-600">Actions</th>
               </tr>
@@ -117,12 +120,34 @@ export default function JobList() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-gray-700">{job.title}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {job.location && <span>{job.location}</span>}
+                    {job.remote_type && (
+                      <span className="ml-1 text-xs text-gray-400">({job.remote_type})</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {job.salary_min || job.salary_max
+                      ? `${job.salary_min ? `$${job.salary_min.toLocaleString()}` : "?"}–${job.salary_max ? `$${job.salary_max.toLocaleString()}` : "?"}`
+                      : ""}
+                  </td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${STATUS_COLORS[job.status] ?? ""}`}
                     >
                       {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {job.tags && (
+                      <div className="flex flex-wrap gap-1">
+                        {job.tags.split(",").map((tag) => tag.trim()).filter(Boolean).map((tag) => (
+                          <span key={tag} className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-500">
                     {new Date(job.created_at).toLocaleDateString()}

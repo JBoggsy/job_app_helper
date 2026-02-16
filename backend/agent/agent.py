@@ -40,11 +40,19 @@ class Agent:
         for _ in range(MAX_ITERATIONS):
             text_accum = ""
             tool_calls = []
+            iteration_started = False
 
             for chunk in self.provider.stream_with_tools(
                 working_messages, TOOL_DEFINITIONS, SYSTEM_PROMPT
             ):
                 if chunk.type == "text":
+                    # Add newline separation between text from different iterations
+                    if not iteration_started and full_text:
+                        separator = "\n\n"
+                        text_accum += separator
+                        full_text += separator
+                        yield {"event": "text_delta", "data": {"content": separator}}
+                    iteration_started = True
                     text_accum += chunk.content
                     full_text += chunk.content
                     yield {"event": "text_delta", "data": {"content": chunk.content}}

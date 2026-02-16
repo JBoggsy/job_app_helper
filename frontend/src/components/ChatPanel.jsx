@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   fetchConversations,
   createConversation,
@@ -262,7 +264,15 @@ function ChatPanel({ isOpen, onClose }) {
                           : "bg-gray-100 text-gray-900"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      {msg.role === "assistant" ? (
+                        <div className="markdown-body">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      )}
                     </div>
                   </div>
                   {/* Tool call indicators after assistant messages */}

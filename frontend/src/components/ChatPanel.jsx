@@ -15,7 +15,6 @@ function ChatPanel({ isOpen, onClose }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [toolStatus, setToolStatus] = useState({});
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -27,7 +26,7 @@ function ChatPanel({ isOpen, onClose }) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, toolStatus]);
+  }, [messages]);
 
   useEffect(() => {
     if (isOpen && !isStreaming) {
@@ -49,7 +48,6 @@ function ChatPanel({ isOpen, onClose }) {
       const data = await fetchConversation(id);
       setCurrentConversation(data);
       setMessages(data.messages || []);
-      setToolStatus({});
     } catch (e) {
       console.error("Failed to load conversation:", e);
     }
@@ -60,7 +58,6 @@ function ChatPanel({ isOpen, onClose }) {
       const convo = await createConversation();
       setCurrentConversation(convo);
       setMessages([]);
-      setToolStatus({});
       await loadConversations();
     } catch (e) {
       console.error("Failed to create conversation:", e);
@@ -94,83 +91,84 @@ function ChatPanel({ isOpen, onClose }) {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsStreaming(true);
-    setToolStatus({});
 
-    // Add placeholder for assistant response
+    // Add placeholder for assistant response with segments array
     const assistantIdx = messages.length + 1;
-    setMessages((prev) => [...prev, { role: "assistant", content: "", tool_calls: [] }]);
+    setMessages((prev) => [...prev, { role: "assistant", content: "", segments: [] }]);
 
+    // Mutable tracking for the streaming callback
     let fullText = "";
-    const toolCallsLog = [];
+    let segments = [];
+    let currentTextIdx = -1;
 
-    try {
-      await streamMessage(convo.id, userMessage.content, (event) => {
-        if (event.event === "text_delta") {
-          fullText += event.data.content;
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[assistantIdx] = {
-              ...updated[assistantIdx],
-              content: fullText,
-            };
-            return updated;
-          });
-        } else if (event.event === "tool_start") {
-          toolCallsLog.push(event.data);
-          setToolStatus((prev) => ({
-            ...prev,
-            [event.data.id]: { name: event.data.name, status: "running" },
-          }));
-        } else if (event.event === "tool_result") {
-          setToolStatus((prev) => ({
-            ...prev,
-            [event.data.id]: { name: event.data.name, status: "completed" },
-          }));
-        } else if (event.event === "tool_error") {
-          setToolStatus((prev) => ({
-            ...prev,
-            [event.data.id]: {
-              name: event.data.name,
-              status: "error",
-              error: event.data.error,
-            },
-          }));
-        } else if (event.event === "done") {
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[assistantIdx] = {
-              ...updated[assistantIdx],
-              content: fullText,
-              tool_calls: toolCallsLog.length > 0 ? toolCallsLog : null,
-            };
-            return updated;
-          });
-        } else if (event.event === "error") {
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[assistantIdx] = {
-              ...updated[assistantIdx],
-              content: fullText || `Error: ${event.data.message}`,
-            };
-            return updated;
-          });
-        }
-      });
-    } catch (e) {
-      console.error("Stream error:", e);
+    function pushUpdate() {
+      const snapshotSegments = segments.map((s) => ({ ...s }));
       setMessages((prev) => {
         const updated = [...prev];
         updated[assistantIdx] = {
           ...updated[assistantIdx],
-          content: fullText || "Failed to get response. Check your API configuration.",
+          content: fullText,
+          segments: snapshotSegments,
         };
         return updated;
       });
     }
 
+    try {
+      await streamMessage(convo.id, userMessage.content, (event) => {
+        if (event.event === "text_delta") {
+          fullText += event.data.content;
+          // Append to current text segment, or create a new one
+          if (currentTextIdx >= 0 && segments[currentTextIdx].type === "text") {
+            segments[currentTextIdx].content += event.data.content;
+          } else {
+            currentTextIdx = segments.length;
+            segments.push({ type: "text", content: event.data.content });
+          }
+          pushUpdate();
+        } else if (event.event === "tool_start") {
+          // End current text segment tracking so next text creates a new segment
+          currentTextIdx = -1;
+          segments.push({
+            type: "tool",
+            id: event.data.id,
+            name: event.data.name,
+            status: "running",
+          });
+          pushUpdate();
+        } else if (event.event === "tool_result") {
+          const idx = segments.findIndex((s) => s.type === "tool" && s.id === event.data.id);
+          if (idx >= 0) {
+            segments[idx] = { ...segments[idx], status: "completed" };
+          }
+          pushUpdate();
+        } else if (event.event === "tool_error") {
+          const idx = segments.findIndex((s) => s.type === "tool" && s.id === event.data.id);
+          if (idx >= 0) {
+            segments[idx] = { ...segments[idx], status: "error", error: event.data.error };
+          }
+          pushUpdate();
+        } else if (event.event === "done") {
+          pushUpdate();
+        } else if (event.event === "error") {
+          if (!fullText) {
+            fullText = `Error: ${event.data.message}`;
+            segments.push({ type: "text", content: fullText });
+          }
+          pushUpdate();
+        }
+      });
+    } catch (e) {
+      console.error("Stream error:", e);
+      if (!fullText) {
+        fullText = "Failed to get response. Check your API configuration.";
+        segments.push({ type: "text", content: fullText });
+      }
+      pushUpdate();
+    }
+
     setIsStreaming(false);
     await loadConversations();
-    // Update current conversation reference
     setCurrentConversation((prev) => (prev ? { ...prev, title: input.trim().slice(0, 100) } : prev));
   }
 
@@ -254,50 +252,60 @@ function ChatPanel({ isOpen, onClose }) {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((msg, i) => (
                 <div key={i}>
-                  <div
-                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                        msg.role === "user"
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-100 text-gray-900"
-                      }`}
-                    >
-                      {msg.role === "assistant" ? (
-                        <div className="markdown-body">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {msg.content}
-                          </ReactMarkdown>
+                  {msg.role === "assistant" && msg.segments && msg.segments.length > 0 ? (
+                    /* Render assistant segments in order */
+                    msg.segments.map((seg, j) =>
+                      seg.type === "text" ? (
+                        <div key={j} className="flex justify-start mb-2">
+                          <div className="max-w-[80%] rounded-lg px-4 py-2 bg-gray-100 text-gray-900">
+                            <div className="markdown-body">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {seg.content}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
                         </div>
-                      ) : (
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
-                      )}
-                    </div>
-                  </div>
-                  {/* Tool call indicators after assistant messages */}
-                  {msg.role === "assistant" && i === messages.length - 1 && Object.keys(toolStatus).length > 0 && (
-                    <div className="mt-2 ml-2 space-y-1">
-                      {Object.entries(toolStatus).map(([id, tool]) => (
-                        <div key={id} className="flex items-center gap-2 text-xs text-gray-500">
-                          {tool.status === "running" ? (
+                      ) : seg.type === "tool" ? (
+                        <div key={j} className="ml-2 mb-2 flex items-center gap-2 text-xs text-gray-500">
+                          {seg.status === "running" ? (
                             <span className="inline-block w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                          ) : tool.status === "completed" ? (
+                          ) : seg.status === "completed" ? (
                             <span className="text-green-500">&#10003;</span>
                           ) : (
                             <span className="text-red-500">&#10007;</span>
                           )}
-                          <span className="font-mono">{tool.name}</span>
-                          {tool.error && (
-                            <span className="text-red-500">- {tool.error}</span>
+                          <span className="font-mono">{seg.name}</span>
+                          {seg.error && (
+                            <span className="text-red-500">- {seg.error}</span>
                           )}
                         </div>
-                      ))}
+                      ) : null
+                    )
+                  ) : (
+                    /* User messages or assistant messages without segments (e.g. from history) */
+                    <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <div
+                        className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                          msg.role === "user"
+                            ? "bg-blue-600 text-white"
+                            : "bg-gray-100 text-gray-900"
+                        }`}
+                      >
+                        {msg.role === "assistant" ? (
+                          <div className="markdown-body">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
               ))}
-              {isStreaming && messages[messages.length - 1]?.content === "" && (
+              {isStreaming && messages[messages.length - 1]?.content === "" && (!messages[messages.length - 1]?.segments || messages[messages.length - 1].segments.length === 0) && (
                 <div className="flex justify-start">
                   <div className="bg-gray-100 rounded-lg px-4 py-2">
                     <span className="inline-block w-2 h-2 bg-gray-400 rounded-full animate-pulse" />

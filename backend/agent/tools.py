@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import date
 
 import requests
@@ -10,18 +11,57 @@ from backend.agent.user_profile import read_profile, write_profile
 
 TOOL_DEFINITIONS = [
     {
-        "name": "search_jobs",
-        "description": "Search the web for job postings using Tavily search API. Use this to find job listings matching specific criteria.",
+        "name": "web_search",
+        "description": "Search the web using Tavily. This is a general-purpose web search, not specific to job listings. Use this for researching companies, reading articles, or finding information that isn't a job listing.",
         "parameters": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Search query for finding job postings",
+                    "description": "Search query",
                 },
                 "num_results": {
                     "type": "integer",
                     "description": "Number of results to return (default 5, max 10)",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "job_search",
+        "description": "Search dedicated job board APIs (Adzuna, JSearch) for real job listings. Use this when the user wants to find job openings. Returns structured job data including title, company, location, salary, and application URL.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Job search keywords (e.g., 'python developer', 'data scientist')",
+                },
+                "location": {
+                    "type": "string",
+                    "description": "Location filter (e.g., 'New York', 'London')",
+                },
+                "remote_only": {
+                    "type": "boolean",
+                    "description": "Filter for remote jobs only",
+                },
+                "salary_min": {
+                    "type": "integer",
+                    "description": "Minimum salary filter",
+                },
+                "salary_max": {
+                    "type": "integer",
+                    "description": "Maximum salary filter",
+                },
+                "num_results": {
+                    "type": "integer",
+                    "description": "Number of results to return (default 10, max 20)",
+                },
+                "provider": {
+                    "type": "string",
+                    "enum": ["adzuna", "jsearch"],
+                    "description": "Force a specific job search provider; defaults to whichever is configured (prefers JSearch if both available)",
                 },
             },
             "required": ["query"],
@@ -70,6 +110,7 @@ TOOL_DEFINITIONS = [
                 "source": {"type": "string", "description": "Where the job was found"},
                 "requirements": {"type": "string", "description": "Job requirements or qualifications, as a newline-separated list"},
                 "nice_to_haves": {"type": "string", "description": "Nice-to-have qualifications, as a newline-separated list"},
+                "job_fit": {"type": "integer", "description": "Job fit rating from 0-5 stars based on how well this job matches the user's profile (0 = poor fit, 5 = excellent fit). Always set this when creating a job and a user profile exists.", "minimum": 0, "maximum": 5},
             },
             "required": ["company", "title"],
         },
@@ -130,12 +171,18 @@ TOOL_DEFINITIONS = [
 
 
 class AgentTools:
-    def __init__(self, search_api_key=""):
+    def __init__(self, search_api_key="", adzuna_app_id="", adzuna_app_key="",
+                 adzuna_country="us", jsearch_api_key=""):
         self.search_api_key = search_api_key
+        self.adzuna_app_id = adzuna_app_id
+        self.adzuna_app_key = adzuna_app_key
+        self.adzuna_country = adzuna_country
+        self.jsearch_api_key = jsearch_api_key
 
     def execute(self, tool_name, arguments):
         methods = {
-            "search_jobs": self._search_jobs,
+            "web_search": self._web_search,
+            "job_search": self._job_search,
             "scrape_url": self._scrape_url,
             "create_job": self._create_job,
             "list_jobs": self._list_jobs,
@@ -150,7 +197,7 @@ class AgentTools:
         except Exception as e:
             return {"error": str(e)}
 
-    def _search_jobs(self, query, num_results=5):
+    def _web_search(self, query, num_results=5):
         if not self.search_api_key:
             return {"error": "SEARCH_API_KEY not configured"}
         num_results = min(num_results, 10)
@@ -174,6 +221,124 @@ class AgentTools:
                 "snippet": r.get("content", "")[:500],
             })
         return {"results": results}
+
+    # ------------------------------------------------------------------
+    # Job search via Adzuna / JSearch
+    # ------------------------------------------------------------------
+
+    def _job_search(self, query, location=None, remote_only=False,
+                    salary_min=None, salary_max=None, num_results=10,
+                    provider=None):
+        num_results = max(1, min(num_results, 20))
+
+        has_adzuna = bool(self.adzuna_app_id and self.adzuna_app_key)
+        has_jsearch = bool(self.jsearch_api_key)
+
+        # Pick provider
+        if provider == "adzuna":
+            if not has_adzuna:
+                return {"error": "Adzuna API keys not configured (ADZUNA_APP_ID, ADZUNA_APP_KEY)"}
+        elif provider == "jsearch":
+            if not has_jsearch:
+                return {"error": "JSearch API key not configured (JSEARCH_API_KEY)"}
+        else:
+            # Auto-select: prefer JSearch, fall back to Adzuna
+            if has_jsearch:
+                provider = "jsearch"
+            elif has_adzuna:
+                provider = "adzuna"
+            else:
+                return {"error": "No job search API keys configured. Set JSEARCH_API_KEY or ADZUNA_APP_ID + ADZUNA_APP_KEY environment variables."}
+
+        if provider == "adzuna":
+            return self._search_adzuna(query, location, salary_min, salary_max, num_results)
+        else:
+            return self._search_jsearch(query, location, remote_only, num_results)
+
+    def _search_adzuna(self, query, location, salary_min, salary_max, num_results):
+        params = {
+            "app_id": self.adzuna_app_id,
+            "app_key": self.adzuna_app_key,
+            "what": query,
+            "results_per_page": num_results,
+        }
+        if location:
+            params["where"] = location
+        if salary_min is not None:
+            params["salary_min"] = salary_min
+        if salary_max is not None:
+            params["salary_max"] = salary_max
+
+        country = self.adzuna_country or "us"
+        resp = requests.get(
+            f"https://api.adzuna.com/v1/api/jobs/{country}/search/1",
+            params=params,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        results = []
+        for r in data.get("results", []):
+            results.append({
+                "title": r.get("title", ""),
+                "company": r.get("company", {}).get("display_name", ""),
+                "location": r.get("location", {}).get("display_name", ""),
+                "url": r.get("redirect_url", ""),
+                "description": (r.get("description", "") or "")[:500],
+                "salary_min": r.get("salary_min"),
+                "salary_max": r.get("salary_max"),
+                "remote": None,
+                "employment_type": r.get("contract_type"),
+                "posted_date": (r.get("created") or "")[:10] or None,
+                "source": "adzuna",
+            })
+
+        return {"results": results, "provider": "adzuna", "total": len(results)}
+
+    def _search_jsearch(self, query, location, remote_only, num_results):
+        search_query = query
+        if location:
+            search_query = f"{query} in {location}"
+
+        params = {
+            "query": search_query,
+            "num_pages": 1,
+        }
+        if remote_only:
+            params["remote_jobs_only"] = "true"
+
+        resp = requests.get(
+            "https://jsearch.p.rapidapi.com/search",
+            params=params,
+            headers={
+                "X-RapidAPI-Key": self.jsearch_api_key,
+                "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        results = []
+        for r in data.get("data", []):
+            if len(results) >= num_results:
+                break
+            results.append({
+                "title": r.get("job_title", ""),
+                "company": r.get("employer_name", ""),
+                "location": f"{r.get('job_city', '') or ''}, {r.get('job_state', '') or ''}".strip(", "),
+                "url": r.get("job_apply_link") or r.get("job_google_link", ""),
+                "description": (r.get("job_description", "") or "")[:500],
+                "salary_min": r.get("job_min_salary"),
+                "salary_max": r.get("job_max_salary"),
+                "remote": r.get("job_is_remote", False),
+                "employment_type": r.get("job_employment_type"),
+                "posted_date": (r.get("job_posted_at_datetime_utc") or "")[:10] or None,
+                "source": "jsearch",
+            })
+
+        return {"results": results, "provider": "jsearch", "total": len(results)}
 
     def _scrape_url(self, url):
         resp = requests.get(url, timeout=20, headers={"User-Agent": "JobAppHelper/1.0"})
@@ -202,6 +367,7 @@ class AgentTools:
             contact_name=kwargs.get("contact_name"),
             contact_email=kwargs.get("contact_email"),
             source=kwargs.get("source"),
+            job_fit=kwargs.get("job_fit"),
             requirements=kwargs.get("requirements"),
             nice_to_haves=kwargs.get("nice_to_haves"),
         )

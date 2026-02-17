@@ -67,6 +67,17 @@ function JobDetailPanel({ job, isOpen, onClose, onEdit }) {
             )}
           </div>
 
+          {/* Job Fit */}
+          {job.job_fit != null && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-1">Job Fit</h3>
+              <span className="text-amber-500 text-lg">
+                {"★".repeat(job.job_fit)}{"☆".repeat(5 - job.job_fit)}
+              </span>
+              <span className="ml-2 text-sm text-gray-500">{job.job_fit}/5</span>
+            </div>
+          )}
+
           {/* Basic Info */}
           {job.location && (
             <div>

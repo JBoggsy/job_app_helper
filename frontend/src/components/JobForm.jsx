@@ -18,6 +18,7 @@ export default function JobForm({ onSubmit, initialData, onCancel }) {
     contact_name: initialData?.contact_name ?? "",
     contact_email: initialData?.contact_email ?? "",
     tags: initialData?.tags ?? "",
+    job_fit: initialData?.job_fit ?? "",
     requirements: initialData?.requirements ?? "",
     nice_to_haves: initialData?.nice_to_haves ?? "",
     notes: initialData?.notes ?? "",
@@ -35,6 +36,8 @@ export default function JobForm({ onSubmit, initialData, onCancel }) {
     if (payload.salary_max === "") payload.salary_max = null;
     if (payload.applied_date === "") payload.applied_date = null;
     if (payload.remote_type === "") payload.remote_type = null;
+    if (payload.job_fit === "") payload.job_fit = null;
+    else payload.job_fit = Number(payload.job_fit);
     onSubmit(payload);
   }
 
@@ -122,10 +125,21 @@ export default function JobForm({ onSubmit, initialData, onCancel }) {
         </div>
       </div>
 
-      {/* Tags */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
-        <input name="tags" value={form.tags} onChange={handleChange} placeholder="Comma-separated, e.g. python, startup, series-b" className={inputCls} />
+      {/* Job Fit & Tags */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Job Fit (0-5)</label>
+          <select name="job_fit" value={form.job_fit} onChange={handleChange} className={inputCls}>
+            <option value="">— None —</option>
+            {[0, 1, 2, 3, 4, 5].map((n) => (
+              <option key={n} value={n}>{"★".repeat(n)}{"☆".repeat(5 - n)} ({n})</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+          <input name="tags" value={form.tags} onChange={handleChange} placeholder="Comma-separated, e.g. python, startup, series-b" className={inputCls} />
+        </div>
       </div>
 
       {/* Requirements */}

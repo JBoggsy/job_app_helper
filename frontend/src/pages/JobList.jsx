@@ -11,7 +11,7 @@ const STATUS_COLORS = {
   rejected: "bg-red-100 text-red-700",
 };
 
-export default function JobList() {
+export default function JobList({ refreshVersion }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -20,7 +20,7 @@ export default function JobList() {
 
   useEffect(() => {
     loadJobs();
-  }, []);
+  }, [refreshVersion]);
 
   async function loadJobs() {
     try {
@@ -99,6 +99,7 @@ export default function JobList() {
                 <th className="px-4 py-3 text-sm font-medium text-gray-600">Location</th>
                 <th className="px-4 py-3 text-sm font-medium text-gray-600">Salary</th>
                 <th className="px-4 py-3 text-sm font-medium text-gray-600">Status</th>
+                <th className="px-4 py-3 text-sm font-medium text-gray-600">Fit</th>
                 <th className="px-4 py-3 text-sm font-medium text-gray-600">Tags</th>
                 <th className="px-4 py-3 text-sm font-medium text-gray-600">Added</th>
                 <th className="px-4 py-3 text-sm font-medium text-gray-600">Actions</th>
@@ -144,6 +145,11 @@ export default function JobList() {
                     >
                       {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-amber-500 text-sm whitespace-nowrap">
+                    {job.job_fit != null && (
+                      <>{"★".repeat(job.job_fit)}{"☆".repeat(5 - job.job_fit)}</>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {job.tags && (

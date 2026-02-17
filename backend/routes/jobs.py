@@ -33,6 +33,7 @@ def create_job():
         contact_email=data.get("contact_email"),
         applied_date=date.fromisoformat(applied) if applied else None,
         source=data.get("source"),
+        job_fit=data.get("job_fit"),
     )
     db.session.add(job)
     db.session.commit()
@@ -51,7 +52,8 @@ def update_job(job_id):
     data = request.get_json()
     for field in ("company", "title", "url", "status", "notes",
                    "salary_min", "salary_max", "location", "remote_type",
-                   "tags", "contact_name", "contact_email", "source"):
+                   "tags", "contact_name", "contact_email", "source",
+                   "job_fit"):
         if field in data:
             setattr(job, field, data[field])
     if "applied_date" in data:

@@ -11,12 +11,52 @@ const STATUS_COLORS = {
   rejected: "bg-red-100 text-red-700",
 };
 
+const STATUS_ORDER = { saved: 0, applied: 1, interviewing: 2, offer: 3, rejected: 4 };
+
+const SORTABLE_COLUMNS = [
+  { key: "company", label: "Company" },
+  { key: "title", label: "Title" },
+  { key: "location", label: "Location" },
+  { key: "salary_min", label: "Salary" },
+  { key: "status", label: "Status" },
+  { key: "job_fit", label: "Fit" },
+  { key: "tags", label: "Tags" },
+  { key: "created_at", label: "Added" },
+];
+
+function compareJobs(a, b, column, direction) {
+  let valA, valB;
+
+  if (column === "status") {
+    valA = STATUS_ORDER[a.status] ?? 99;
+    valB = STATUS_ORDER[b.status] ?? 99;
+  } else if (column === "salary_min") {
+    valA = a.salary_min ?? (direction === "asc" ? Infinity : -Infinity);
+    valB = b.salary_min ?? (direction === "asc" ? Infinity : -Infinity);
+  } else if (column === "job_fit") {
+    valA = a.job_fit ?? (direction === "asc" ? Infinity : -Infinity);
+    valB = b.job_fit ?? (direction === "asc" ? Infinity : -Infinity);
+  } else if (column === "created_at") {
+    valA = new Date(a.created_at).getTime();
+    valB = new Date(b.created_at).getTime();
+  } else {
+    valA = (a[column] ?? "").toString().toLowerCase();
+    valB = (b[column] ?? "").toString().toLowerCase();
+  }
+
+  if (valA < valB) return direction === "asc" ? -1 : 1;
+  if (valA > valB) return direction === "asc" ? 1 : -1;
+  return 0;
+}
+
 export default function JobList({ refreshVersion }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [sortColumn, setSortColumn] = useState("created_at");
+  const [sortDirection, setSortDirection] = useState("desc");
 
   useEffect(() => {
     loadJobs();
@@ -48,6 +88,17 @@ export default function JobList({ refreshVersion }) {
     await deleteJob(id);
     loadJobs();
   }
+
+  function handleSort(column) {
+    if (sortColumn === column) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  }
+
+  const sortedJobs = [...jobs].sort((a, b) => compareJobs(a, b, sortColumn, sortDirection));
 
   if (loading) {
     return <p className="text-gray-500 text-center py-12">Loading...</p>;
@@ -94,19 +145,27 @@ export default function JobList({ refreshVersion }) {
           <table className="w-full text-left">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-4 py-3 text-sm font-medium text-gray-600">Company</th>
-                <th className="px-4 py-3 text-sm font-medium text-gray-600">Title</th>
-                <th className="px-4 py-3 text-sm font-medium text-gray-600">Location</th>
-                <th className="px-4 py-3 text-sm font-medium text-gray-600">Salary</th>
-                <th className="px-4 py-3 text-sm font-medium text-gray-600">Status</th>
-                <th className="px-4 py-3 text-sm font-medium text-gray-600">Fit</th>
-                <th className="px-4 py-3 text-sm font-medium text-gray-600">Tags</th>
-                <th className="px-4 py-3 text-sm font-medium text-gray-600">Added</th>
+                {SORTABLE_COLUMNS.map(({ key, label }) => (
+                  <th
+                    key={key}
+                    onClick={() => handleSort(key)}
+                    className="px-4 py-3 text-sm font-medium text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {label}
+                      {sortColumn === key ? (
+                        <span className="text-blue-600">{sortDirection === "asc" ? "▲" : "▼"}</span>
+                      ) : (
+                        <span className="text-gray-300">⇅</span>
+                      )}
+                    </span>
+                  </th>
+                ))}
                 <th className="px-4 py-3 text-sm font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {jobs.map((job) => (
+              {sortedJobs.map((job) => (
                 <tr
                   key={job.id}
                   onClick={() => setSelectedJob(job)}

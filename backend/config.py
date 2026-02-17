@@ -19,6 +19,9 @@ class Config:
     ADZUNA_COUNTRY = os.environ.get("ADZUNA_COUNTRY", "us")
     JSEARCH_API_KEY = os.environ.get("JSEARCH_API_KEY", "")
 
+    # Logging
+    LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+
     # Onboarding LLM — defaults to the main LLM provider when not set
     ONBOARDING_LLM_PROVIDER = os.environ.get("ONBOARDING_LLM_PROVIDER", "")
     ONBOARDING_LLM_API_KEY = os.environ.get("ONBOARDING_LLM_API_KEY", "")

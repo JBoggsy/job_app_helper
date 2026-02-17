@@ -7,7 +7,8 @@ from backend.agent.user_profile import read_profile, set_onboarded
 SYSTEM_PROMPT = """You are a helpful job search assistant. You help users find, research, and track job applications.
 
 You have access to tools that let you:
-- Search the web for job postings
+- Search dedicated job board APIs (Adzuna, JSearch) for real job listings
+- Search the web for general information, company research, etc.
 - Scrape job posting URLs to extract details
 - Add jobs to the user's tracker
 - List and search jobs already being tracked (filter by status, company, title, or URL)
@@ -38,15 +39,25 @@ When the user asks you to find jobs, search for them, extract the relevant detai
 
 Before adding a new job, check if it's already in the tracker by searching for the company name or URL to avoid duplicates.
 
+When adding a job, always set the `job_fit` field (0-5) based on how well the job matches the user's profile. 5 = excellent fit, 0 = poor fit. Consider requirements match, salary alignment, location/remote preferences, and career goals.
+
 Be concise and helpful. After adding jobs, confirm what was added and note how well the job matches the user's profile."""
 
 MAX_ITERATIONS = 10
 
 
 class Agent:
-    def __init__(self, provider: LLMProvider, search_api_key=""):
+    def __init__(self, provider: LLMProvider, search_api_key="",
+                 adzuna_app_id="", adzuna_app_key="", adzuna_country="us",
+                 jsearch_api_key=""):
         self.provider = provider
-        self.tools = AgentTools(search_api_key=search_api_key)
+        self.tools = AgentTools(
+            search_api_key=search_api_key,
+            adzuna_app_id=adzuna_app_id,
+            adzuna_app_key=adzuna_app_key,
+            adzuna_country=adzuna_country,
+            jsearch_api_key=jsearch_api_key,
+        )
 
     def run(self, messages):
         """Run the agent loop, yielding SSE event dicts.

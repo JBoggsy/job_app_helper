@@ -13,6 +13,12 @@ class Config:
     LLM_MODEL = os.environ.get("LLM_MODEL", "")
     SEARCH_API_KEY = os.environ.get("SEARCH_API_KEY", "")
 
+    # Job search APIs
+    ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID", "")
+    ADZUNA_APP_KEY = os.environ.get("ADZUNA_APP_KEY", "")
+    ADZUNA_COUNTRY = os.environ.get("ADZUNA_COUNTRY", "us")
+    JSEARCH_API_KEY = os.environ.get("JSEARCH_API_KEY", "")
+
     # Onboarding LLM — defaults to the main LLM provider when not set
     ONBOARDING_LLM_PROVIDER = os.environ.get("ONBOARDING_LLM_PROVIDER", "")
     ONBOARDING_LLM_API_KEY = os.environ.get("ONBOARDING_LLM_API_KEY", "")

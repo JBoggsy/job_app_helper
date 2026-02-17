@@ -75,7 +75,14 @@ def send_message(convo_id):
         config["LLM_API_KEY"],
         config["LLM_MODEL"] or None,
     )
-    agent = Agent(provider, search_api_key=config["SEARCH_API_KEY"])
+    agent = Agent(
+        provider,
+        search_api_key=config["SEARCH_API_KEY"],
+        adzuna_app_id=config["ADZUNA_APP_ID"],
+        adzuna_app_key=config["ADZUNA_APP_KEY"],
+        adzuna_country=config["ADZUNA_COUNTRY"],
+        jsearch_api_key=config["JSEARCH_API_KEY"],
+    )
 
     def generate():
         full_text = ""

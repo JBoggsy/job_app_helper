@@ -24,3 +24,4 @@ logs/
 
 # Environment
 .env
+config.json

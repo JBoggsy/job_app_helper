@@ -1,0 +1,22 @@
+{
+  "llm": {
+    "provider": "anthropic",
+    "api_key": "your-api-key-here",
+    "model": ""
+  },
+  "onboarding_llm": {
+    "provider": "",
+    "api_key": "",
+    "model": ""
+  },
+  "integrations": {
+    "search_api_key": "",
+    "adzuna_app_id": "",
+    "adzuna_app_key": "",
+    "adzuna_country": "us",
+    "jsearch_api_key": ""
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}

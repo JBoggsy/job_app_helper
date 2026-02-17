@@ -58,7 +58,8 @@ The Job Application Helper is built as a full-stack web application with a clear
 job_app_helper/
 ├── backend/
 │   ├── app.py                      # Flask app factory (create_app)
-│   ├── config.py                   # Configuration class with env var loading
+│   ├── config.py                   # Configuration class with config file + env vars
+│   ├── config_manager.py           # Config file read/write utilities
 │   ├── database.py                 # SQLAlchemy db instance
 │   ├── models/
 │   │   ├── __init__.py            # Model exports
@@ -68,7 +69,8 @@ job_app_helper/
 │   │   ├── __init__.py
 │   │   ├── jobs.py                # CRUD endpoints for jobs
 │   │   ├── chat.py                # Chat endpoints with SSE streaming
-│   │   └── profile.py             # User profile endpoints
+│   │   ├── profile.py             # User profile endpoints
+│   │   └── config.py              # Config and health check endpoints
 │   ├── llm/
 │   │   ├── base.py                # LLMProvider ABC, StreamChunk, ToolCall dataclasses
 │   │   ├── factory.py             # create_provider() factory function
@@ -94,11 +96,16 @@ job_app_helper/
 │       └── components/
 │           ├── JobForm.jsx        # Create/edit job form
 │           ├── ChatPanel.jsx      # AI assistant slide-out panel
-│           └── ProfilePanel.jsx   # User profile slide-out panel
+│           ├── ProfilePanel.jsx   # User profile slide-out panel
+│           └── SettingsPanel.jsx  # Settings configuration panel
 ├── logs/
 │   └── app.log                    # Application logs (auto-created, gitignored)
+├── start.sh                       # Unified startup script (Mac/Linux)
+├── start.bat                      # Unified startup script (Windows)
 ├── main.py                        # Backend entry point
 ├── pyproject.toml                 # Python dependencies (uv)
+├── config.json                    # User configuration (gitignored)
+├── config.example.json            # Example configuration template
 ├── app.db                         # SQLite database (gitignored)
 ├── user_profile.md                # User profile file (gitignored)
 └── CLAUDE.md                      # Claude Code instructions
@@ -112,7 +119,9 @@ job_app_helper/
 
 **`backend/app.py`**: App factory that creates and configures the Flask app, registers blueprints, and initializes the database.
 
-**`backend/config.py`**: Centralized configuration loading from environment variables. Includes LLM provider settings, API keys, and logging configuration.
+**`backend/config.py`**: Centralized configuration loading from config.json file with environment variable fallback. Includes LLM provider settings, API keys, and logging configuration.
+
+**`backend/config_manager.py`**: Configuration file management utilities. Provides functions to read/write config.json, get/set individual config values, and mask sensitive data. Environment variables override file-based config.
 
 **`backend/database.py`**: SQLAlchemy instance shared across the app.
 
@@ -125,6 +134,8 @@ job_app_helper/
 **`backend/routes/chat.py`**: Chat blueprint with SSE streaming. Mounted at `/api/chat`. Handles conversation creation, message sending, and agent response streaming.
 
 **`backend/routes/profile.py`**: Profile blueprint for user profile CRUD and onboarding status. Mounted at `/api/profile`.
+
+**`backend/routes/config.py`**: Configuration blueprint for settings management. Provides endpoints for getting/updating config, testing LLM connections, listing providers, and health checks. Mounted at `/api/config`.
 
 **`backend/llm/base.py`**: Abstract base class defining the interface all LLM providers must implement (`stream_with_tools`). Also defines `StreamChunk` and `ToolCall` dataclasses.
 
@@ -154,6 +165,8 @@ job_app_helper/
 
 **`frontend/src/components/ProfilePanel.jsx`**: Slide-out user profile viewer/editor panel. Users can manually update their profile markdown.
 
+**`frontend/src/components/SettingsPanel.jsx`**: Slide-out settings panel for configuring LLM provider, API keys, and integrations. Includes "Test Connection" functionality and saves to config.json.
+
 ## Development Setup
 
 ### Prerequisites
@@ -163,9 +176,35 @@ job_app_helper/
 - **uv**: Install with `pip install uv` or via [standalone installer](https://github.com/astral-sh/uv)
 - **npm**: Comes with Node.js
 
-### Backend Setup
+### Quick Start (Recommended for First-Time Setup)
 
-1. Install Python dependencies:
+The fastest way to get the development environment running:
+
+**Mac/Linux:**
+```bash
+./start.sh
+```
+
+**Windows:**
+```bash
+start.bat
+```
+
+The startup script will:
+- Check and guide installation of prerequisites
+- Install all dependencies (backend and frontend)
+- Start both servers concurrently
+- Open your browser to http://localhost:3000
+
+Once the app is running, configure your LLM API key through the Settings panel (gear icon in the header).
+
+### Manual Setup (For Development Workflow)
+
+For developers who prefer manual control over each component:
+
+#### Backend Setup
+
+1. **Install Python dependencies:**
 
 ```bash
 uv sync
@@ -173,31 +212,45 @@ uv sync
 
 This creates a virtual environment and installs all dependencies from `pyproject.toml`.
 
-2. Configure environment variables (create a `.env` file or export in your shell):
+2. **Configure the application:**
 
-```bash
-# Required for AI assistant
-export LLM_PROVIDER=anthropic  # or openai, gemini, ollama
-export LLM_API_KEY=your-api-key-here
+Configuration is managed through `config.json` (auto-created on first run). You can:
 
-# Optional: web search integration
-export SEARCH_API_KEY=your-tavily-key
+- **Use the Settings UI** (recommended): Start the app and configure via the Settings panel
+- **Edit config.json manually**: Copy `config.example.json` to `config.json` and edit
+- **Use environment variables** (overrides config.json): Export in your shell
 
-# Optional: job search integration
-export JSEARCH_API_KEY=your-rapidapi-key
-# OR
-export ADZUNA_APP_ID=your-app-id
-export ADZUNA_APP_KEY=your-app-key
-
-# Optional: onboarding with cheaper model
-export ONBOARDING_LLM_PROVIDER=anthropic
-export ONBOARDING_LLM_MODEL=claude-haiku-4-5-20251001
-
-# Optional: logging
-export LOG_LEVEL=INFO
+**Example config.json:**
+```json
+{
+  "llm": {
+    "provider": "anthropic",
+    "api_key": "your-api-key-here",
+    "model": ""
+  },
+  "integrations": {
+    "search_api_key": "",
+    "jsearch_api_key": "",
+    "adzuna_app_id": "",
+    "adzuna_app_key": ""
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}
 ```
 
-3. Run the Flask server:
+**Environment variable override (optional):**
+```bash
+export LLM_PROVIDER=anthropic
+export LLM_API_KEY=your-api-key-here
+export SEARCH_API_KEY=your-tavily-key
+export LOG_LEVEL=DEBUG
+```
+
+Environment variables take precedence over `config.json` values.
+
+3. **Run the Flask server:**
 
 ```bash
 uv run python main.py
@@ -205,24 +258,24 @@ uv run python main.py
 
 The API will be available at `http://localhost:5000`.
 
-### Frontend Setup
+#### Frontend Setup
 
-1. Install Node dependencies:
+1. **Install Node dependencies:**
 
 ```bash
 cd frontend
 npm install
 ```
 
-2. Run the Vite dev server:
+2. **Run the Vite dev server:**
 
 ```bash
 npm run dev
 ```
 
-The frontend will be available at `http://localhost:3000`. The Vite dev server proxies `/api` requests to the Flask backend.
+The frontend will be available at `http://localhost:3000`. The Vite dev server proxies `/api` requests to the Flask backend at `localhost:5000`.
 
-### Production Build
+#### Production Build
 
 To verify frontend changes compile correctly:
 
@@ -232,6 +285,16 @@ npm run build
 ```
 
 This creates an optimized production build in `frontend/dist`.
+
+### Configuration Priority
+
+The application loads configuration in this order (later sources override earlier ones):
+
+1. **Default values** (hardcoded in `backend/config_manager.py`)
+2. **config.json** (persistent user configuration)
+3. **Environment variables** (highest priority)
+
+This allows flexibility for different deployment scenarios while maintaining a simple user experience.
 
 ## API Reference
 
@@ -311,6 +374,44 @@ Auto-generated:
 | PUT | `/api/profile` | Update user profile markdown | `{content: "..."}` | `{content: "..."}` |
 | GET | `/api/profile/onboarding-status` | Check if onboarded | — | `{onboarded: true/false}` |
 | POST | `/api/profile/onboarding-status` | Set onboarding status | `{onboarded: true/false}` | `{onboarded: true/false}` |
+
+### Config API
+
+| Method | Endpoint | Description | Request Body | Response |
+|--------|----------|-------------|--------------|----------|
+| GET | `/api/config` | Get configuration (masked) | — | `{llm: {...}, integrations: {...}}` |
+| POST | `/api/config` | Update configuration | `{llm: {...}, integrations: {...}}` | `{success: true}` |
+| POST | `/api/config/test` | Test LLM connection | `{provider, api_key, model?}` | `{success: true/false, message}` |
+| GET | `/api/config/providers` | List available LLM providers | — | `[{id, name, default_model, requires_api_key}, ...]` |
+| GET | `/api/health` | Health check endpoint | — | `{status, llm: {...}, integrations: {...}}` |
+
+**Configuration Object Format:**
+```json
+{
+  "llm": {
+    "provider": "anthropic",
+    "api_key": "sk-ant-****",
+    "model": ""
+  },
+  "onboarding_llm": {
+    "provider": "",
+    "api_key": "",
+    "model": ""
+  },
+  "integrations": {
+    "search_api_key": "",
+    "adzuna_app_id": "",
+    "adzuna_app_key": "",
+    "adzuna_country": "us",
+    "jsearch_api_key": ""
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}
+```
+
+**Note**: API keys are masked with asterisks when returned via GET `/api/config`.
 
 ## Database Models
 
@@ -393,19 +494,38 @@ The LLM provider system uses an abstract factory pattern to support multiple AI 
 
 ### Configuration
 
-Providers are configured via environment variables:
+Providers are configured through `config.json` (with optional environment variable override):
 
-```python
+**config.json format:**
+```json
+{
+  "llm": {
+    "provider": "anthropic",
+    "api_key": "your-api-key-here",
+    "model": ""
+  },
+  "onboarding_llm": {
+    "provider": "",
+    "api_key": "",
+    "model": "claude-haiku-4-5-20251001"
+  }
+}
+```
+
+**Environment variable override (optional):**
+```bash
 # Main chat configuration
-LLM_PROVIDER = 'anthropic'  # or 'openai', 'gemini', 'ollama'
-LLM_API_KEY = 'your-api-key'
-LLM_MODEL = 'custom-model-name'  # optional override
+export LLM_PROVIDER=anthropic
+export LLM_API_KEY=your-api-key
+export LLM_MODEL=custom-model-name
 
 # Onboarding configuration (optional, defaults to main config)
-ONBOARDING_LLM_PROVIDER = 'anthropic'
-ONBOARDING_LLM_API_KEY = 'your-api-key'
-ONBOARDING_LLM_MODEL = 'claude-haiku-4-5-20251001'  # cheaper model
+export ONBOARDING_LLM_PROVIDER=anthropic
+export ONBOARDING_LLM_API_KEY=your-api-key
+export ONBOARDING_LLM_MODEL=claude-haiku-4-5-20251001
 ```
+
+Configuration is managed by `backend/config_manager.py` which reads from `config.json` and falls back to environment variables. The Settings UI provides a user-friendly interface for configuration.
 
 ### Adding a New Provider
 
@@ -635,12 +755,14 @@ npm run test
 ### Production Considerations
 
 1. **Database**: Replace SQLite with PostgreSQL or MySQL for production
-2. **Environment variables**: Use a secrets manager (AWS Secrets Manager, etc.)
+2. **Configuration**: Use environment variables (not `config.json`) with a secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.)
 3. **WSGI server**: Run Flask with Gunicorn or uWSGI (not the dev server)
 4. **Static files**: Serve frontend build with nginx or CDN
 5. **HTTPS**: Use TLS certificates (Let's Encrypt)
 6. **Logging**: Send logs to a centralized logging service
 7. **Monitoring**: Add application performance monitoring (APM)
+
+**Note**: While `config.json` is convenient for local development, environment variables are recommended for production deployments as they integrate better with container orchestration, CI/CD pipelines, and secrets management systems.
 
 ### Build Process
 
@@ -671,7 +793,9 @@ def serve_frontend(path):
 gunicorn -w 4 -b 0.0.0.0:5000 "backend.app:create_app()"
 ```
 
-### Environment Variables for Production
+### Configuration for Production
+
+**Recommended**: Use environment variables for production deployments (they override `config.json`):
 
 ```bash
 # Flask
@@ -681,17 +805,26 @@ SECRET_KEY=your-secret-key
 # Database
 DATABASE_URL=postgresql://user:pass@host:5432/dbname
 
-# LLM
+# LLM Configuration
 LLM_PROVIDER=anthropic
 LLM_API_KEY=your-api-key
+LLM_MODEL=claude-sonnet-4-5-20250929
 
-# Optional integrations
+# Onboarding LLM (optional, uses cheaper model)
+ONBOARDING_LLM_PROVIDER=anthropic
+ONBOARDING_LLM_MODEL=claude-haiku-4-5-20251001
+
+# Optional Integrations
 SEARCH_API_KEY=your-tavily-key
 JSEARCH_API_KEY=your-rapidapi-key
+ADZUNA_APP_ID=your-app-id
+ADZUNA_APP_KEY=your-app-key
 
 # Logging
 LOG_LEVEL=INFO
 ```
+
+Environment variables take precedence over `config.json`, making them ideal for containerized deployments and CI/CD pipelines.
 
 ## Contributing
 

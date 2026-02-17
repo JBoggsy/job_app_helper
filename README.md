@@ -53,18 +53,53 @@ First-time users go through a friendly interview to build their profile.
 
 ## Quick Start
 
-### Prerequisites
+### Easy Setup (Recommended)
+
+The easiest way to get started is with our one-command startup script:
+
+1. **Clone the repository**:
+
+```bash
+git clone https://github.com/JBoggsy/job_app_helper.git
+cd job_app_helper
+```
+
+2. **Run the startup script**:
+
+**On Mac/Linux:**
+```bash
+./start.sh
+```
+
+**On Windows:**
+```bash
+start.bat
+```
+
+That's it! The script will:
+- ✅ Check if Python, Node.js, and uv are installed (and guide you if not)
+- ✅ Install all dependencies automatically
+- ✅ Start both backend and frontend servers
+- ✅ Open your browser to http://localhost:3000
+
+When you first open the app, configure your LLM API key by clicking the **Settings** (gear icon) in the header.
+
+### Manual Setup (Advanced)
+
+If you prefer to set things up manually or need more control:
+
+#### Prerequisites
 
 - **Python 3.12+** — [Download](https://www.python.org/downloads/)
 - **Node.js 18+** — [Download](https://nodejs.org/)
 - **uv** — [Install](https://github.com/astral-sh/uv): `pip install uv`
 
-### Installation
+#### Installation Steps
 
 1. **Clone the repository**:
 
 ```bash
-git clone https://github.com/yourusername/job_app_helper.git
+git clone https://github.com/JBoggsy/job_app_helper.git
 cd job_app_helper
 ```
 
@@ -92,66 +127,52 @@ The frontend will be available at `http://localhost:3000`.
 
 ## Configuration
 
-The AI assistant requires configuration via environment variables. Create a `.env` file in the project root or export these in your shell:
+### Using the Settings UI (Recommended)
 
-### Required Configuration
+The easiest way to configure the AI assistant is through the Settings panel:
+
+1. **Open the app** in your browser (http://localhost:3000)
+2. **Click the Settings icon** (gear icon) in the top-right header
+3. **Choose your LLM provider** from the dropdown (Anthropic Claude, OpenAI GPT, Google Gemini, or Ollama)
+4. **Enter your API key** (if required - Ollama runs locally and doesn't need one)
+5. **Click "Test Connection"** to verify your credentials work
+6. **Click "Save Settings"** to persist your configuration
+
+**Optional integrations** (enables additional features):
+- **Tavily Search API**: Enables web search tool
+- **JSearch API** (RapidAPI): Enables job board search (recommended)
+- **Adzuna API**: Alternative job board search
+
+All settings are saved to a local `config.json` file and persist across restarts.
+
+### Available LLM Providers
+
+| Provider | Default Model | API Key Required | Get API Key |
+|----------|---------------|------------------|-------------|
+| Anthropic Claude | `claude-sonnet-4-5-20250929` | Yes | [console.anthropic.com](https://console.anthropic.com/) |
+| OpenAI GPT | `gpt-4o` | Yes | [platform.openai.com](https://platform.openai.com/) |
+| Google Gemini | `gemini-2.0-flash` | Yes | [aistudio.google.com](https://aistudio.google.com/) |
+| Ollama (Local) | `llama3.1` | No | [ollama.com](https://ollama.com/) |
+
+### Advanced: Environment Variables
+
+For advanced users or automated deployments, you can also configure via environment variables (these override the Settings UI):
 
 ```bash
-# Choose your LLM provider (anthropic, openai, gemini, or ollama)
+# LLM Configuration
 export LLM_PROVIDER=anthropic
-
-# API key for your chosen provider (not needed for Ollama)
 export LLM_API_KEY=your-api-key-here
-```
+export LLM_MODEL=custom-model-name  # optional
 
-### Optional Configuration
+# Optional Integrations
+export SEARCH_API_KEY=your-tavily-key
+export JSEARCH_API_KEY=your-rapidapi-key
 
-```bash
-# Override the default model for your provider
-export LLM_MODEL=custom-model-name
-
-# Enable web search (requires Tavily API key)
-export SEARCH_API_KEY=your-tavily-api-key
-
-# Enable job board search (choose one or both)
-export JSEARCH_API_KEY=your-rapidapi-key       # JSearch (preferred)
-export ADZUNA_APP_ID=your-adzuna-app-id        # Adzuna
-export ADZUNA_APP_KEY=your-adzuna-app-key
-
-# Use a cheaper model for onboarding (optional)
-export ONBOARDING_LLM_MODEL=claude-haiku-4-5-20251001
-
-# Logging level (DEBUG, INFO, WARNING, ERROR)
+# Logging
 export LOG_LEVEL=INFO
 ```
 
-### Provider Defaults
-
-| Provider | Default Model | API Key Required |
-|----------|---------------|------------------|
-| `anthropic` | `claude-sonnet-4-5-20250929` | Yes ([Get key](https://console.anthropic.com/)) |
-| `openai` | `gpt-4o` | Yes ([Get key](https://platform.openai.com/)) |
-| `gemini` | `gemini-2.0-flash` | Yes ([Get key](https://aistudio.google.com/)) |
-| `ollama` | `llama3.1` | No (runs locally) |
-
-### Example: Using Anthropic Claude
-
-```bash
-export LLM_PROVIDER=anthropic
-export LLM_API_KEY=sk-ant-...
-export SEARCH_API_KEY=tvly-...
-uv run python main.py
-```
-
-### Example: Using Ollama (Local)
-
-Make sure the Ollama server is running locally on port 11434:
-
-```bash
-export LLM_PROVIDER=ollama
-export LLM_MODEL=llama3.1  # or any model you have pulled
-uv run python main.py
-```
+See `config.example.json` for the complete configuration file format.
 
 ## Usage
 
@@ -166,6 +187,75 @@ uv run python main.py
    - The assistant will automatically add jobs to your tracker
 6. **Track your progress** — Update job statuses (saved → applied → interviewing → offer/rejected)
 7. **Manage your profile** — Click the profile icon to view or edit your job preferences
+
+## Troubleshooting
+
+### "LLM is not configured" error
+
+**Problem**: The AI assistant shows "LLM is not configured" when you try to use it.
+
+**Solution**:
+1. Click the **Settings** (gear icon) in the header
+2. Select an LLM provider and enter your API key
+3. Click **Test Connection** to verify it works
+4. Click **Save Settings**
+
+### Dependencies not installed
+
+**Problem**: The startup script says Python, Node.js, or uv is not installed.
+
+**Solution**:
+- **Python**: Download from [python.org](https://www.python.org/downloads/) (need 3.12+)
+- **Node.js**: Download from [nodejs.org](https://nodejs.org/) (need 18+)
+- **uv**: Run `pip install uv` or see [installation guide](https://github.com/astral-sh/uv)
+
+### Port already in use
+
+**Problem**: "Address already in use" error on port 3000 or 5000.
+
+**Solution**:
+- Stop any other processes using those ports
+- Or change the ports in `vite.config.js` (frontend) and `main.py` (backend)
+
+### Ollama connection failed
+
+**Problem**: Can't connect to Ollama for local LLM.
+
+**Solution**:
+1. Make sure Ollama is installed: [ollama.com](https://ollama.com/)
+2. Start the Ollama server: `ollama serve`
+3. Pull a model: `ollama pull llama3.1`
+4. In Settings, select "Ollama (Local)" as your provider
+
+### AI assistant not responding
+
+**Problem**: Messages sent to the AI don't get responses.
+
+**Solution**:
+1. Check the browser console (F12) for errors
+2. Check the backend terminal for error messages
+3. Verify your API key is correct in Settings
+4. Try the "Test Connection" button in Settings
+5. Check your internet connection (for cloud providers)
+
+### Missing dependencies after git pull
+
+**Problem**: App won't start after pulling latest changes.
+
+**Solution**:
+```bash
+# Reinstall backend dependencies
+uv sync
+
+# Reinstall frontend dependencies
+cd frontend && npm install
+```
+
+### Need more help?
+
+- Check the [DEVELOPMENT.md](DEVELOPMENT.md) for technical details
+- Report bugs at [GitHub Issues](https://github.com/JBoggsy/job_app_helper/issues)
+- See logs in `logs/app.log` for backend errors
 
 ## Tech Stack
 

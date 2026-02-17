@@ -19,5 +19,8 @@ user_profile.md
 node_modules/
 frontend/dist/
 
+# Logs
+logs/
+
 # Environment
 .env

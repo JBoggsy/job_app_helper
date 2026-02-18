@@ -44,7 +44,8 @@ The start scripts handle everything automatically. Use the manual commands below
 ### Root
 - `start.sh` — unified startup script for Mac/Linux (checks deps, installs packages, starts servers, opens browser)
 - `start.bat` — unified startup script for Windows (checks deps, installs packages, starts servers, opens browser)
-- `build_sidecar.sh` — builds Flask backend as a PyInstaller binary for Tauri sidecar
+- `build_sidecar.sh` — builds Flask backend as a PyInstaller binary for Tauri sidecar (Mac/Linux)
+- `build_sidecar.ps1` — builds Flask backend as a PyInstaller binary for Tauri sidecar (Windows)
 - `config.json` — application configuration file (auto-created, gitignored)
 - `app.db` — SQLite database (auto-created, gitignored)
 - `user_profile.md` — user job search profile with YAML frontmatter (auto-created, gitignored)
@@ -92,6 +93,10 @@ The start scripts handle everything automatically. Use the manual commands below
 - `src-tauri/src/main.rs` — Rust entry point
 - `src-tauri/src/lib.rs` — Sidecar launch logic (spawns Flask backend with `--data-dir` pointing to appDataDir)
 - `src-tauri/capabilities/default.json` — Shell permissions for sidecar spawning
+
+### CI/CD
+- `.github/workflows/release.yml` — builds Tauri app for all platforms on `v*` tag push, creates draft GitHub Release
+- `.github/workflows/ci.yml` — builds Tauri app on PRs to `main` (Linux + Windows only, no release upload)
 
 ## API Endpoints
 
@@ -253,6 +258,31 @@ Environment variables are checked first, then `config.json`. Useful for developm
 - All API calls go through `frontend/src/api.js` — never call `fetch` directly in components
 - Use Tailwind CSS utility classes for styling — no separate CSS files per component
 - Keep components focused: if a component grows beyond ~150 lines, consider extracting subcomponents
+
+## CI/CD & Releases
+
+### Creating a Release
+1. Ensure version is updated in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`
+2. Tag and push:
+   ```bash
+   git tag v0.4.0
+   git push origin v0.4.0
+   ```
+3. The `release.yml` workflow builds for all 4 platforms (Linux x86_64, macOS ARM64, macOS x86_64, Windows x86_64)
+4. A **draft** GitHub Release is created with installer artifacts
+5. Go to GitHub Releases, review the draft, and click **Publish**
+
+### Workflows
+- **`.github/workflows/release.yml`** — triggered by `v*` tags or manual `workflow_dispatch`; builds all platforms and uploads artifacts to a draft release
+- **`.github/workflows/ci.yml`** — triggered on PRs to `main`; builds Linux + Windows only (no release upload) to verify the app compiles
+
+### Sidecar Build Scripts
+- `build_sidecar.sh` — Mac/Linux: detects arch, runs PyInstaller, places binary in `src-tauri/binaries/`
+- `build_sidecar.ps1` — Windows PowerShell equivalent of the above
+
+### Code Signing (Future)
+- macOS: add Apple Developer secrets (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`, etc.) to repo settings; uncomment env vars in `release.yml`
+- Windows: add Tauri signing key secrets (`TAURI_SIGNING_PRIVATE_KEY`, etc.) to repo settings; uncomment env vars in `release.yml`
 
 ## Documentation
 

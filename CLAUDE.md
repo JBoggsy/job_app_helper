@@ -268,7 +268,7 @@ Environment variables are checked first, then `config.json`. Useful for developm
    git tag v0.4.0
    git push origin v0.4.0
    ```
-3. The `release.yml` workflow builds for all 4 platforms (Linux x86_64, macOS ARM64, macOS x86_64, Windows x86_64)
+3. The `release.yml` workflow builds for all 3 platforms (Linux x86_64, macOS ARM64, Windows x86_64)
 4. A **draft** GitHub Release is created with installer artifacts
 5. Go to GitHub Releases, review the draft, and click **Publish**
 

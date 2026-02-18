@@ -10,7 +10,8 @@ from backend.config_manager import (
     save_config,
     config_to_dict,
     update_config_value,
-    get_llm_config
+    get_llm_config,
+    get_integration_config
 )
 from backend.llm.factory import create_provider
 import logging
@@ -52,28 +53,33 @@ def update_config():
         if not data:
             return jsonify({"error": "No data provided"}), 400
 
+        def is_masked_value(value):
+            """Check if a value appears to be masked (contains asterisks)"""
+            return isinstance(value, str) and "*" in value
+
         # Load current config
         config = load_config()
 
         # Update config with provided data
         if "llm" in data:
             for key, value in data["llm"].items():
-                if value is not None:  # Only update if value is provided
+                # Only update if value is provided and not masked
+                if value is not None and not is_masked_value(value):
                     config["llm"][key] = value
 
         if "onboarding_llm" in data:
             for key, value in data["onboarding_llm"].items():
-                if value is not None:
+                if value is not None and not is_masked_value(value):
                     config["onboarding_llm"][key] = value
 
         if "integrations" in data:
             for key, value in data["integrations"].items():
-                if value is not None:
+                if value is not None and not is_masked_value(value):
                     config["integrations"][key] = value
 
         if "logging" in data:
             for key, value in data["logging"].items():
-                if value is not None:
+                if value is not None and not is_masked_value(value):
                     config["logging"][key] = value
 
         # Save updated config
@@ -129,8 +135,8 @@ def test_connection():
                 messages=test_messages,
                 tools=[]
             ):
-                if chunk.delta:
-                    test_response += chunk.delta
+                if chunk.content:
+                    test_response += chunk.content
 
             if test_response:
                 logger.info(f"LLM connection test successful for provider: {provider}")

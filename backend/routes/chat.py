@@ -4,6 +4,7 @@ import logging
 from flask import Blueprint, Response, current_app, request, stream_with_context
 
 from backend.agent.agent import Agent, OnboardingAgent
+from backend.config_manager import get_llm_config, get_onboarding_llm_config, get_integration_config
 from backend.database import db
 from backend.llm.factory import create_provider
 from backend.models.chat import Conversation, Message
@@ -74,9 +75,12 @@ def send_message(convo_id):
     for msg in convo.messages:
         llm_messages.append({"role": msg.role, "content": msg.content})
 
+    # Get config dynamically from config manager (not Flask's static config)
+    llm_config = get_llm_config()
+    integration_config = get_integration_config()
+
     # Check if LLM is configured
-    config = current_app.config
-    if not config["LLM_API_KEY"] and config["LLM_PROVIDER"] != "ollama":
+    if not llm_config["api_key"] and llm_config["provider"] != "ollama":
         def error_stream():
             error_msg = {
                 "event": "error",
@@ -98,17 +102,18 @@ def send_message(convo_id):
     # Create provider and agent
     try:
         provider = create_provider(
-            config["LLM_PROVIDER"],
-            config["LLM_API_KEY"],
-            config["LLM_MODEL"] or None,
+            llm_config["provider"],
+            llm_config["api_key"],
+            llm_config["model"],
         )
     except Exception as e:
         logger.error(f"Failed to create LLM provider: {e}")
+        error_message = f"Failed to initialize LLM provider: {str(e)}"
         def error_stream():
             error_msg = {
                 "event": "error",
                 "data": json.dumps({
-                    "message": f"Failed to initialize LLM provider: {str(e)}"
+                    "message": error_message
                 })
             }
             yield f"event: {error_msg['event']}\ndata: {error_msg['data']}\n\n"
@@ -123,11 +128,11 @@ def send_message(convo_id):
         )
     agent = Agent(
         provider,
-        search_api_key=config["SEARCH_API_KEY"],
-        adzuna_app_id=config["ADZUNA_APP_ID"],
-        adzuna_app_key=config["ADZUNA_APP_KEY"],
-        adzuna_country=config["ADZUNA_COUNTRY"],
-        jsearch_api_key=config["JSEARCH_API_KEY"],
+        search_api_key=integration_config["search_api_key"],
+        adzuna_app_id=integration_config["adzuna_app_id"],
+        adzuna_app_key=integration_config["adzuna_app_key"],
+        adzuna_country=integration_config["adzuna_country"],
+        jsearch_api_key=integration_config["jsearch_api_key"],
     )
 
     def generate():
@@ -167,14 +172,16 @@ def send_message(convo_id):
     )
 
 
-def _get_onboarding_provider(config):
+def _get_onboarding_provider():
     """Build the LLM provider for onboarding, falling back to the main config.
 
     Raises ValueError if LLM is not configured.
     """
-    provider_name = config["ONBOARDING_LLM_PROVIDER"] or config["LLM_PROVIDER"]
-    api_key = config["ONBOARDING_LLM_API_KEY"] or config["LLM_API_KEY"]
-    model = config["ONBOARDING_LLM_MODEL"] or config["LLM_MODEL"] or None
+    # Get config dynamically from config manager (not Flask's static config)
+    onboarding_config = get_onboarding_llm_config()
+    provider_name = onboarding_config["provider"]
+    api_key = onboarding_config["api_key"]
+    model = onboarding_config["model"]
 
     if not api_key and provider_name != "ollama":
         raise ValueError("LLM is not configured. Please configure your API key in Settings.")
@@ -210,18 +217,17 @@ def send_onboarding_message(convo_id):
     for msg in convo.messages:
         llm_messages.append({"role": msg.role, "content": msg.content})
 
-    config = current_app.config
-
     try:
-        provider = _get_onboarding_provider(config)
+        provider = _get_onboarding_provider()
         agent = OnboardingAgent(provider)
     except Exception as e:
         logger.error(f"Failed to create onboarding provider: {e}")
+        error_message = f"Failed to initialize LLM: {str(e)}"
         def error_stream():
             error_msg = {
                 "event": "error",
                 "data": json.dumps({
-                    "message": f"Failed to initialize LLM: {str(e)}"
+                    "message": error_message
                 })
             }
             yield f"event: {error_msg['event']}\ndata: {error_msg['data']}\n\n"
@@ -299,18 +305,17 @@ def kick_onboarding():
     db.session.commit()
     llm_messages = [{"role": "user", "content": kick_text}]
 
-    config = current_app.config
-
     try:
-        provider = _get_onboarding_provider(config)
+        provider = _get_onboarding_provider()
         agent = OnboardingAgent(provider)
     except Exception as e:
         logger.error(f"Failed to create onboarding provider: {e}")
+        error_message = f"Failed to initialize LLM: {str(e)}"
         def error_stream():
             error_msg = {
                 "event": "error",
                 "data": json.dumps({
-                    "message": f"Failed to initialize LLM: {str(e)}"
+                    "message": error_message
                 })
             }
             yield f"event: {error_msg['event']}\ndata: {error_msg['data']}\n\n"

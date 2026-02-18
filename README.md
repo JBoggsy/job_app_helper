@@ -20,7 +20,7 @@ Job Application Helper is a full-stack web app that helps you organize your job 
 
 ## Quick Start
 
-See [the Installation guide](INSTALLATION.md) for an easy-to-follow guide to installing and running
+See [the Installation guide](docs/INSTALLATION.md) for an easy-to-follow guide to installing and running
 the Job App Helper.
 
 ### Easy Setup (Recommended)
@@ -176,7 +176,7 @@ export JSEARCH_API_KEY=your-rapidapi-key
 export LOG_LEVEL=INFO
 ```
 
-See `config.example.json` for the complete configuration file format.
+See [`docs/config.example.json`](docs/config.example.json) for the complete configuration file format.
 
 ## Usage
 
@@ -283,7 +283,7 @@ cd frontend && npm install
 
 ### Need more help?
 
-- Check the [DEVELOPMENT.md](DEVELOPMENT.md) for technical details
+- Check the [DEVELOPMENT.md](docs/DEVELOPMENT.md) for technical details
 - Report bugs at [GitHub Issues](https://github.com/JBoggsy/job_app_helper/issues)
 - See logs in `logs/app.log` for backend errors
 
@@ -309,14 +309,14 @@ npm run tauri:dev                      # Terminal 2
 npm run tauri:build                    # Build the desktop app
 ```
 
-The browser-based workflow (`./start.sh` / `start.bat`) continues to work as before. See [DEVELOPMENT.md](DEVELOPMENT.md) for more details.
+The browser-based workflow (`./start.sh` / `start.bat`) continues to work as before. See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for more details.
 
 ## Development
 
 For detailed technical documentation, development setup, API reference, and contribution guidelines, see:
 
-- **[DEVELOPMENT.md](DEVELOPMENT.md)** — Comprehensive developer guide
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — How to contribute to this project
+- **[DEVELOPMENT.md](docs/DEVELOPMENT.md)** — Comprehensive developer guide
+- **[CONTRIBUTING.md](docs/CONTRIBUTING.md)** — How to contribute to this project
 
 ## License
 

@@ -9,32 +9,48 @@ Job application helper — a web app to track and manage job applications. Users
 ## Tech Stack
 
 - **Backend:** Python 3.12+, Flask, Flask-SQLAlchemy, SQLite
-- **LLM providers:** Anthropic, OpenAI, Google Gemini, Ollama (configurable via env vars)
-- **Agent tools:** Tavily search API, BeautifulSoup web scraping
+- **LLM providers:** Anthropic, OpenAI, Google Gemini, Ollama (configurable via Settings UI or env vars)
+- **Agent tools:** Tavily search API, BeautifulSoup web scraping, JSearch/Adzuna job search
 - **Frontend:** React 19, Vite, Tailwind CSS 4
 - **Package management:** uv (Python), npm (JS)
 
 ## Key Commands
 
-### Backend
+### Quick Start (Recommended)
+- **Mac/Linux:** `./start.sh` — auto-checks dependencies, installs packages if needed, starts both servers, opens browser
+- **Windows:** `start.bat` — auto-checks dependencies, installs packages if needed, starts both servers, opens browser
+
+The start scripts handle everything automatically. Use the manual commands below only if you need fine-grained control.
+
+### Backend (Manual)
 - `uv sync` — install Python dependencies
 - `uv run python main.py` — start Flask dev server (port 5000)
 
-### Frontend
+### Frontend (Manual)
 - `cd frontend && npm install` — install JS dependencies
 - `cd frontend && npm run dev` — start Vite dev server (port 3000)
 - `cd frontend && npm run build` — production build (use to verify changes compile)
 
 ## Project Structure
 
+### Root
+- `start.sh` — unified startup script for Mac/Linux (checks deps, installs packages, starts servers, opens browser)
+- `start.bat` — unified startup script for Windows (checks deps, installs packages, starts servers, opens browser)
+- `config.json` — application configuration file (auto-created, gitignored)
+- `app.db` — SQLite database (auto-created, gitignored)
+- `user_profile.md` — user job search profile with YAML frontmatter (auto-created, gitignored)
+
 ### Backend
 - `main.py` — entry point, runs Flask server
 - `backend/app.py` — Flask app factory (`create_app`)
-- `backend/config.py` — app configuration
+- `backend/config.py` — app configuration (Flask-specific settings)
+- `backend/config_manager.py` — configuration file management (read/write `config.json`, env var fallback)
 - `backend/database.py` — SQLAlchemy `db` instance
 - `backend/models/job.py` — `Job` model (fields: `id`, `company`, `title`, `url`, `status`, `notes`, `salary_min`, `salary_max`, `location`, `remote_type`, `tags`, `contact_name`, `contact_email`, `applied_date`, `source`, `job_fit`, `created_at`, `updated_at`)
 - `backend/routes/jobs.py` — CRUD blueprint (`jobs_bp` at `/api/jobs`)
 - `backend/routes/chat.py` — Chat blueprint (`chat_bp` at `/api/chat`) with SSE streaming
+- `backend/routes/config.py` — Configuration blueprint (`config_bp` at `/api/config`, `/api/health`)
+- `backend/routes/profile.py` — Profile blueprint (`profile_bp` at `/api/profile`)
 - `backend/models/chat.py` — `Conversation` and `Message` models for chat persistence
 - `backend/llm/base.py` — `LLMProvider` ABC, `StreamChunk`, `ToolCall` dataclasses
 - `backend/llm/anthropic_provider.py` — Anthropic Claude provider
@@ -45,18 +61,18 @@ Job application helper — a web app to track and manage job applications. Users
 - `backend/agent/tools.py` — `AgentTools` class + `TOOL_DEFINITIONS` (web_search, job_search, scrape_url, create_job, list_jobs, read_user_profile, update_user_profile)
 - `backend/agent/agent.py` — `Agent` class with iterative tool-calling loop; `OnboardingAgent` for user profile interview; injects user profile into system prompt
 - `backend/agent/user_profile.py` — User profile markdown file management with YAML frontmatter (onboarded flag), read/write/onboarding helpers
-- `backend/routes/profile.py` — Profile blueprint (`profile_bp` at `/api/profile`)
 
 ### Frontend
 - `frontend/vite.config.js` — Vite config (React plugin, Tailwind CSS plugin, API proxy)
 - `frontend/src/main.jsx` — React entry point
 - `frontend/src/index.css` — Tailwind CSS base import
-- `frontend/src/App.jsx` — App shell with header, layout, and onboarding auto-start
-- `frontend/src/api.js` — API helper (`fetchJobs`, `createJob`, `updateJob`, `deleteJob`, chat functions, `streamMessage`, `fetchProfile`, `updateProfile`, onboarding functions)
+- `frontend/src/App.jsx` — App shell with header, layout, settings auto-open, and onboarding auto-start
+- `frontend/src/api.js` — API helper (`fetchJobs`, `createJob`, `updateJob`, `deleteJob`, chat functions, `streamMessage`, `fetchProfile`, `updateProfile`, config functions, onboarding functions)
 - `frontend/src/pages/JobList.jsx` — Main dashboard: job table with status badges, add/edit/delete
 - `frontend/src/components/JobForm.jsx` — Reusable form for creating and editing jobs
 - `frontend/src/components/ChatPanel.jsx` — Slide-out AI assistant chat panel with SSE streaming
 - `frontend/src/components/ProfilePanel.jsx` — Slide-out user profile viewer/editor panel
+- `frontend/src/components/SettingsPanel.jsx` — Slide-out settings panel for configuring LLM provider and API keys
 
 ## API Endpoints
 
@@ -79,26 +95,68 @@ Job application helper — a web app to track and manage job applications. Users
 | POST | `/api/chat/onboarding/conversations` | Create onboarding conversation |
 | POST | `/api/chat/onboarding/conversations/:id/messages` | Send onboarding message, returns SSE stream |
 | POST | `/api/chat/onboarding/kick` | Start onboarding (agent greeting), returns SSE stream |
+| GET | `/api/config` | Get current configuration (with masked API keys) |
+| POST | `/api/config` | Update configuration |
+| POST | `/api/config/test` | Test LLM provider connection |
+| GET | `/api/config/providers` | Get list of available LLM providers |
+| GET | `/api/health` | Health check (returns 503 if LLM not configured) |
 
 Job statuses: `saved`, `applied`, `interviewing`, `offer`, `rejected`
 Remote types: `onsite`, `hybrid`, `remote` (or `null`)
 
 Optional job fields: `salary_min` (int), `salary_max` (int), `location` (string), `remote_type` (string), `tags` (comma-separated string), `contact_name` (string), `contact_email` (string), `applied_date` (ISO date string), `source` (string), `job_fit` (int, 0-5 star rating), `requirements` (text, newline-separated), `nice_to_haves` (text, newline-separated)
 
-### LLM Chat Configuration (env vars)
+### Configuration
+
+**Primary method:** `config.json` file (auto-created in project root)
+
+Users configure the app through the **Settings UI** (accessed via the gear icon in the top navigation). The Settings panel allows users to:
+- Select LLM provider (Anthropic, OpenAI, Gemini, Ollama)
+- Enter API keys
+- Override default models
+- Configure optional integrations (Tavily search, JSearch/Adzuna job search)
+- Test their connection before saving
+
+Configuration structure in `config.json`:
+```json
+{
+  "llm": {
+    "provider": "anthropic",
+    "api_key": "sk-ant-...",
+    "model": ""
+  },
+  "onboarding_llm": {
+    "provider": "",
+    "api_key": "",
+    "model": ""
+  },
+  "integrations": {
+    "search_api_key": "tvly-...",
+    "jsearch_api_key": "",
+    "adzuna_app_id": "",
+    "adzuna_app_key": "",
+    "adzuna_country": "us"
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}
+```
+
+**Fallback method:** Environment variables
+
+Environment variables are checked first, then `config.json`. Useful for development or server deployments:
 - `LLM_PROVIDER` — provider name: `anthropic` (default), `openai`, `gemini`, `ollama`
 - `LLM_API_KEY` — API key for the chosen provider
 - `LLM_MODEL` — optional model override (each provider has a sensible default)
+- `ONBOARDING_LLM_PROVIDER` — optional, defaults to `LLM_PROVIDER`
+- `ONBOARDING_LLM_API_KEY` — optional, defaults to `LLM_API_KEY`
+- `ONBOARDING_LLM_MODEL` — optional, defaults to `LLM_MODEL` (use a cheaper model to save costs)
 - `SEARCH_API_KEY` — Tavily API key for web search tool
 - `ADZUNA_APP_ID` — Adzuna API application ID (for job search)
 - `ADZUNA_APP_KEY` — Adzuna API application key (for job search)
 - `ADZUNA_COUNTRY` — Adzuna country code (default: `us`)
 - `JSEARCH_API_KEY` — RapidAPI key for JSearch API (for job search); preferred over Adzuna when both are configured
-
-### Onboarding LLM Configuration (env vars)
-- `ONBOARDING_LLM_PROVIDER` — optional, defaults to `LLM_PROVIDER`
-- `ONBOARDING_LLM_API_KEY` — optional, defaults to `LLM_API_KEY`
-- `ONBOARDING_LLM_MODEL` — optional, defaults to `LLM_MODEL` (use a cheaper model to save costs)
 
 ### Logging
 - `LOG_LEVEL` — `DEBUG`, `INFO` (default), `WARNING`, `ERROR`
@@ -117,16 +175,31 @@ Optional job fields: `salary_min` (int), `salary_max` (int), `location` (string)
 
 ## Conventions
 
+### Configuration & Startup
+- Use `./start.sh` (Mac/Linux) or `start.bat` (Windows) to start the app — these scripts handle everything automatically
+- Configuration is stored in `config.json` in the project root (auto-created, gitignored)
+- Users configure LLM and integrations through the **Settings UI** (gear icon in nav bar)
+- Settings panel auto-opens on first launch if LLM is not configured
+- Environment variables can override `config.json` values (useful for development/deployment)
+- The `/api/health` endpoint returns 503 if LLM is not configured (used by frontend to trigger settings panel)
+
+### Data Files & Storage
+- SQLite database file is `app.db` in the project root (gitignored, auto-created)
+- User profile file is `user_profile.md` in the project root (gitignored, auto-created with default template)
+- User profile uses YAML frontmatter for metadata (`onboarded: true/false`); body is markdown
+
+### User Onboarding Flow
+- On first visit, if LLM is not configured, Settings panel auto-opens
+- After saving settings, if user hasn't been onboarded, the onboarding interview auto-starts
+- Onboarding uses a separate LLM config (`onboarding_llm.*` in `config.json`) so a cheaper model can be used
+- The AI agent interviews the user and fills their profile via the `update_user_profile` tool
+- Users can view and manually edit their profile anytime via the Profile panel in the UI
+- The AI agent reads the user profile on every turn and injects it into the system prompt
+- The agent proactively extracts job-search-relevant info from user messages and updates the profile
+
+### API & Architecture
 - Backend API routes are prefixed with `/api/`
 - Frontend Vite dev server proxies `/api` to Flask at `localhost:5000`
-- SQLite database file is `app.db` in the project root (gitignored)
-- User profile file is `user_profile.md` in the project root (gitignored, auto-created with default template)
-- The AI agent reads the user profile on every turn and injects it into the system prompt
-- The agent proactively extracts job-search-relevant info from user messages and updates the profile via the `update_user_profile` tool
-- Users can also view and manually edit their profile via the Profile panel in the UI
-- User profile uses YAML frontmatter for metadata (`onboarded: true/false`); body is markdown
-- On first visit, the app auto-opens the chat in onboarding mode to interview the user and fill their profile
-- Onboarding uses a separate LLM config (`ONBOARDING_LLM_*`) so a cheaper model can be used
 - Frontend pages live in `frontend/src/pages/`, reusable components in `frontend/src/components/`
 - API helper functions in `frontend/src/api.js` — all backend calls go through this module
 - **Live job list refresh:** `ChatPanel` has a `JOB_MUTATING_TOOLS` set that tracks which agent tools modify job data (currently `create_job`). When a `tool_result` SSE event fires for one of these tools, the panel calls `onJobsChanged()` which bumps a `jobsVersion` counter in `App`, causing `JobList` to re-fetch. **When adding a new agent tool that creates, updates, or deletes jobs, add its name to `JOB_MUTATING_TOOLS` in `frontend/src/components/ChatPanel.jsx`.**

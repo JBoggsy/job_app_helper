@@ -1,4 +1,5 @@
 use tauri::Manager;
+use tauri_plugin_shell::ShellExt;
 
 pub fn run() {
     tauri::Builder::default()

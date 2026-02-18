@@ -46,7 +46,7 @@ When adding a job, always set the `job_fit` field (0-5) based on how well the jo
 
 Be concise and helpful. After adding jobs, confirm what was added and note how well the job matches the user's profile."""
 
-MAX_ITERATIONS = 10
+MAX_ITERATIONS = 25
 
 
 class Agent:

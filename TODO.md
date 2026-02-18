@@ -2,19 +2,6 @@
 
 ## 🚨 Urgent Bugfixes
 
-- [x] **CRITICAL: First-time user onboarding deadlock** (FIXED)
-  - **Problem**: When the app starts for the first time, it automatically triggers onboarding, but the LLM settings haven't been configured yet. This causes:
-    1. Onboarding chat remains empty (no initial message appears because LLM request fails)
-    2. Onboarding chat is uncloseable, blocking access to the Settings panel
-    3. User cannot configure LLM settings because the onboarding modal blocks the UI
-    4. This creates a deadlock: can't configure settings without closing onboarding, can't complete onboarding without configuring settings
-  - **Impact**: App is completely unusable for first-time users following the Quick Start guide
-  - **Solution Implemented**:
-    - App now checks `/api/health` endpoint on first launch to verify LLM is configured
-    - If LLM not configured and user needs onboarding, Settings panel opens automatically instead of onboarding
-    - After user saves LLM configuration, onboarding automatically starts
-    - This ensures proper setup flow: Settings → Onboarding → App usage
-
 ## Features
 
 - [ ] **Improve agent orchestration**

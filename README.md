@@ -17,41 +17,10 @@ Job Application Helper is a full-stack web app that helps you organize your job 
 - **Rich Job Details**: Track salary ranges, location, remote type, requirements, contact info, and more
 - **Job Fit Ratings**: Rate how well each job matches your profile (0-5 stars)
 
-## Screenshots
-
-### Dashboard
-Manage all your job applications in one place with sortable columns, status badges, and quick actions.
-
-![Job List Dashboard](docs/screenshots/dashboard.png)
-
-### AI Assistant
-Chat with the AI assistant to search for jobs, scrape URLs, and get personalized recommendations. The assistant uses tools like web search and job board APIs to help you find opportunities.
-
-![Chat Panel: Searching for Jobs](docs/screenshots/chat-panel.png)
-
-![Chat Panel: Adding a Job to the Tracker](docs/screenshots/chat-panel-2.png)
-
-### Job Details
-View comprehensive job information including requirements, nice-to-haves, salary, location, and job fit ratings.
-
-![Job Detail Panel](docs/screenshots/job-detail.png)
-
-### Add/Edit Jobs
-Easily add new jobs or update existing ones with a clean, comprehensive form.
-
-![Job Form](docs/screenshots/job-form.png)
-
-### User Profile
-Manage your job search profile with preferences, skills, and goals. The AI uses this to personalize recommendations.
-
-![Profile Panel](docs/screenshots/profile-panel.png)
-
-### Onboarding
-First-time users go through a friendly interview to build their profile.
-
-![Onboarding Flow](docs/screenshots/onboarding.png)
-
 ## Quick Start
+
+See [the Installation guide](INSTALLATION.md) for an easy-to-follow guide to installing and running
+the Job App Helper.
 
 ### Easy Setup (Recommended)
 
@@ -124,6 +93,40 @@ npm run dev
 ```
 
 The frontend will be available at `http://localhost:3000`.
+
+## Screenshots
+
+### Dashboard
+Manage all your job applications in one place with sortable columns, status badges, and quick actions.
+
+![Job List Dashboard](docs/screenshots/dashboard.png)
+
+### AI Assistant
+Chat with the AI assistant to search for jobs, scrape URLs, and get personalized recommendations. The assistant uses tools like web search and job board APIs to help you find opportunities.
+
+![Chat Panel: Searching for Jobs](docs/screenshots/chat-panel.png)
+
+![Chat Panel: Adding a Job to the Tracker](docs/screenshots/chat-panel-2.png)
+
+### Job Details
+View comprehensive job information including requirements, nice-to-haves, salary, location, and job fit ratings.
+
+![Job Detail Panel](docs/screenshots/job-detail.png)
+
+### Add/Edit Jobs
+Easily add new jobs or update existing ones with a clean, comprehensive form.
+
+![Job Form](docs/screenshots/job-form.png)
+
+### User Profile
+Manage your job search profile with preferences, skills, and goals. The AI uses this to personalize recommendations.
+
+![Profile Panel](docs/screenshots/profile-panel.png)
+
+### Onboarding
+First-time users go through a friendly interview to build their profile.
+
+![Onboarding Flow](docs/screenshots/onboarding.png)
 
 ## Configuration
 

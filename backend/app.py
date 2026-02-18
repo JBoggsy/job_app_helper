@@ -5,6 +5,7 @@ from flask import Flask
 from flask_cors import CORS
 
 from backend.config import Config
+from backend.data_dir import get_data_dir
 from backend.database import db
 from backend.routes.jobs import jobs_bp
 from backend.routes.chat import chat_bp
@@ -27,7 +28,7 @@ def _setup_logging(log_level_name):
     root.addHandler(console)
 
     # File handler
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+    log_dir = str(get_data_dir() / "logs")
     os.makedirs(log_dir, exist_ok=True)
     file_handler = logging.FileHandler(os.path.join(log_dir, "app.log"))
     file_handler.setFormatter(formatter)

@@ -13,8 +13,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Default config file location (project root)
-CONFIG_FILE = Path(__file__).parent.parent / 'config.json'
+from backend.data_dir import get_data_dir
+
+
+def _config_file() -> Path:
+    """Return path to config.json (lazy to respect DATA_DIR set after import)."""
+    return get_data_dir() / 'config.json'
 
 # Default configuration template
 DEFAULT_CONFIG = {
@@ -49,13 +53,13 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dictionary with configuration settings
     """
-    if not CONFIG_FILE.exists():
-        logger.info(f"Config file not found at {CONFIG_FILE}, creating with defaults")
+    if not _config_file().exists():
+        logger.info(f"Config file not found at {_config_file()}, creating with defaults")
         save_config(DEFAULT_CONFIG)
         return DEFAULT_CONFIG.copy()
 
     try:
-        with open(CONFIG_FILE, 'r') as f:
+        with open(_config_file(), 'r') as f:
             config = json.load(f)
             logger.info("Configuration loaded from file")
             return config
@@ -79,7 +83,7 @@ def save_config(config: Dict[str, Any]) -> bool:
         True if save was successful, False otherwise
     """
     try:
-        with open(CONFIG_FILE, 'w') as f:
+        with open(_config_file(), 'w') as f:
             json.dump(config, f, indent=2)
             logger.info("Configuration saved to file")
         return True

@@ -6,6 +6,8 @@ The file uses YAML frontmatter to store metadata (e.g. onboarding status)."""
 import os
 import re
 
+from backend.data_dir import get_data_dir
+
 DEFAULT_PROFILE_TEMPLATE = """---
 onboarded: false
 ---
@@ -42,15 +44,12 @@ _No summary yet. The AI assistant will fill this in as it learns about you._
 - _None yet_
 """
 
-_profile_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-PROFILE_PATH = os.path.join(_profile_dir, "user_profile.md")
-
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 
 
 def get_profile_path() -> str:
     """Return the absolute path to the user profile markdown file."""
-    return PROFILE_PATH
+    return str(get_data_dir() / "user_profile.md")
 
 
 def _parse_frontmatter(text: str) -> tuple[dict, str]:

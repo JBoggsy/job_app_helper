@@ -1,11 +1,10 @@
 import os
 from backend.config_manager import get_config_value, get_onboarding_llm_config
-
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+from backend.data_dir import get_data_dir
 
 
 class Config:
-    SQLALCHEMY_DATABASE_URI = "sqlite:///" + os.path.join(BASE_DIR, "..", "app.db")
+    SQLALCHEMY_DATABASE_URI = "sqlite:///" + str(get_data_dir() / "app.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key")
 

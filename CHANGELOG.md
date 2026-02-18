@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-18
+
+### Added
+
+**In-App Help Panel**
+- New Help panel accessible via the `?` button in the header
+- Getting Started section with a 3-step guide (configure LLM → onboarding → add jobs)
+- Job Tracking section covering statuses, fields, and how to add/edit/delete jobs
+- AI Chat Assistant section with example prompts and tool descriptions
+- Getting API Keys section with direct links for all supported providers and integrations (Anthropic, OpenAI, Gemini, Ollama, Tavily, JSearch, Adzuna)
+- Troubleshooting section with solutions for the most common issues
+
+**Onboarding Agent Configuration UI**
+- New collapsible "Onboarding Agent" section in the Settings panel
+- Allows configuring a separate (cheaper) LLM provider, API key, and model for the one-time onboarding interview
+- Defaults to the main AI Assistant configuration when left blank
+- Backend support for `onboarding_llm.*` configuration was already present; this adds the missing UI
+
 ## [0.2.2] - 2026-02-17
 
 ### Fixed

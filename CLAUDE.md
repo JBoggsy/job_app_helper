@@ -211,6 +211,13 @@ Environment variables are checked first, then `config.json`. Useful for developm
 - Run `cd frontend && npm run build` to verify frontend changes compile before committing
 - Prefer editing existing files over creating new ones to avoid file bloat
 
+### Git Commits
+- Use **conventional commit** format: `type: description`
+- Common types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `style`
+- Examples: `feat: add job search filtering`, `fix: resolve onboarding deadlock`, `docs: update installation guide`
+- Use lowercase after the type prefix: `docs: add feature` not `docs: Add feature`
+- Keep subject line concise (under 72 characters), use body for detailed explanations if needed
+
 ### Backend (Python)
 - Follow PEP 8 style conventions
 - Use Flask blueprints for new route groups; register them in `backend/app.py`

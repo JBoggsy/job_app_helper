@@ -217,6 +217,16 @@ export async function testConnection(provider, apiKey, model) {
   return data;
 }
 
+export async function fetchModels(provider, apiKey) {
+  const res = await fetch(`${CONFIG_BASE}/models`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider, api_key: apiKey }),
+  });
+  const data = await res.json();
+  return data;
+}
+
 export async function fetchProviders() {
   const res = await fetch(`${CONFIG_BASE}/providers`);
   if (!res.ok) throw new Error("Failed to fetch providers");

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchConfig, updateConfig, testConnection, fetchProviders } from '../api';
+import ModelCombobox from './ModelCombobox';
 
 const API_KEY_GUIDES = {
   anthropic: {
@@ -315,10 +316,11 @@ export default function SettingsPanel({ isOpen, onClose, onSaved }) {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Model Override (optional)
                     </label>
-                    <input
-                      type="text"
+                    <ModelCombobox
+                      provider={llmProvider}
+                      apiKey={llmApiKey}
                       value={llmModel}
-                      onChange={(e) => setLlmModel(e.target.value)}
+                      onChange={setLlmModel}
                       placeholder={selectedProvider?.default_model || ''}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
@@ -384,10 +386,11 @@ export default function SettingsPanel({ isOpen, onClose, onSaved }) {
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Model Override (optional)
                       </label>
-                      <input
-                        type="text"
+                      <ModelCombobox
+                        provider={onboardingProvider || llmProvider}
+                        apiKey={onboardingApiKey || llmApiKey}
                         value={onboardingModel}
-                        onChange={(e) => setOnboardingModel(e.target.value)}
+                        onChange={setOnboardingModel}
                         placeholder="Leave blank to use the provider default"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />

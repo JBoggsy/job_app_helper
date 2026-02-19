@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { updateConfig, testConnection } from '../api';
+import ModelCombobox from './ModelCombobox';
 
 const PROVIDERS = [
   {
@@ -326,10 +327,11 @@ function StepEnterKey({ provider, apiKey, setApiKey, model, setModel, testStatus
           Advanced: model override
         </summary>
         <div className="mt-2">
-          <input
-            type="text"
+          <ModelCombobox
+            provider={provider.id}
+            apiKey={apiKey}
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={setModel}
             placeholder="Leave blank for default model"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
           />

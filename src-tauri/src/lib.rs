@@ -34,7 +34,7 @@ pub fn run() {
                 let (_rx, child) = sidecar.spawn().expect("failed to spawn sidecar");
 
                 // Keep the child handle in managed state so it outlives setup
-                // and can be killed when the window is destroyed.
+                // and can be killed when the app exits.
                 app.manage(Mutex::new(Some(child)));
 
                 eprintln!("[tauri] Flask sidecar started with data-dir: {:?}", app_data_dir);
@@ -42,20 +42,21 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                if let Some(state) = window
-                    .app_handle()
-                    .try_state::<Mutex<Option<CommandChild>>>()
-                {
-                    if let Ok(mut child) = state.lock() {
-                        if let Some(c) = child.take() {
-                            let _ = c.kill();
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // Kill the sidecar on app exit. RunEvent::Exit fires exactly once
+            // regardless of how the app closes (window close, force quit, etc.),
+            // which is more reliable than WindowEvent::Destroyed.
+            if let tauri::RunEvent::Exit = event {
+                if let Some(state) = app_handle.try_state::<Mutex<Option<CommandChild>>>() {
+                    if let Ok(mut guard) = state.lock() {
+                        if let Some(child) = guard.take() {
+                            eprintln!("[tauri] Killing Flask sidecar...");
+                            let _ = child.kill();
                         }
                     }
                 }
             }
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        });
 }

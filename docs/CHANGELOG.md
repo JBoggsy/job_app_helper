@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Model name discovery** — Model override fields in Settings and Setup Wizard now show a searchable dropdown populated from each provider's API; gracefully falls back to free-text input when the API call fails or no key is entered yet
 
+### Fixed
+- **Flask sidecar not terminating on desktop app close** — Disabled Flask debug mode (and its auto-reloader) when running as a PyInstaller binary, eliminating the orphaned child process that survived window close; also moved sidecar kill logic to `RunEvent::Exit` for more reliable cleanup
+
 ### Improved
 - **Onboarding chat panel can now be closed** — Users can dismiss the chat panel during onboarding to explore the app or change settings; reopening resumes the conversation where it left off; AI Assistant button pulses to indicate an active onboarding session
 

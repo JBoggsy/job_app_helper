@@ -21,6 +21,7 @@ function ChatPanel({ isOpen, onClose, onboarding = false, onOnboardingComplete, 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [expandedErrors, setExpandedErrors] = useState(new Set());
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -416,17 +417,34 @@ function ChatPanel({ isOpen, onClose, onboarding = false, onOnboardingComplete, 
                           </div>
                         </div>
                       ) : seg.type === "tool" ? (
-                        <div key={j} className="ml-2 mb-2 flex items-center gap-2 text-xs text-gray-500">
-                          {seg.status === "running" ? (
-                            <span className="inline-block w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                          ) : seg.status === "completed" ? (
-                            <span className="text-green-500">&#10003;</span>
-                          ) : (
-                            <span className="text-red-500">&#10007;</span>
-                          )}
-                          <span className="font-mono">{seg.name}</span>
-                          {seg.error && (
-                            <span className="text-red-500">- {seg.error}</span>
+                        <div key={j} className="ml-2 mb-2">
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            {seg.status === "running" ? (
+                              <span className="inline-block w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                            ) : seg.status === "completed" ? (
+                              <span className="text-green-500">&#10003;</span>
+                            ) : (
+                              <span className="text-amber-500">&#9888;</span>
+                            )}
+                            <span className="font-mono">{seg.name}</span>
+                            {seg.error && (
+                              <button
+                                onClick={() => setExpandedErrors((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(seg.id)) next.delete(seg.id);
+                                  else next.add(seg.id);
+                                  return next;
+                                })}
+                                className="text-gray-400 hover:text-gray-600 underline"
+                              >
+                                {expandedErrors.has(seg.id) ? "Hide details" : "Details"}
+                              </button>
+                            )}
+                          </div>
+                          {seg.error && expandedErrors.has(seg.id) && (
+                            <div className="ml-5 mt-1 px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded border border-gray-200 font-mono break-all">
+                              {seg.error}
+                            </div>
                           )}
                         </div>
                       ) : null

@@ -3,7 +3,70 @@ use tauri::Manager;
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 
+/// Holds the sidecar process handle and its PID for process-tree cleanup.
+struct Sidecar {
+    child: CommandChild,
+    pid: u32,
+}
+
+/// Kill the sidecar **and all its child processes**.
+///
+/// PyInstaller `--onefile` binaries fork on Linux: the bootloader becomes the
+/// parent (the PID that Tauri knows about) and the actual Python/Flask process
+/// runs as a child.  `CommandChild::kill()` only sends SIGKILL to the parent
+/// bootloader — the child is orphaned and keeps the port bound.
+///
+/// We therefore kill child processes first with `pkill -KILL -P <pid>`, then
+/// kill the bootloader via `CommandChild::kill()`.
+fn kill_sidecar(sidecar: &mut Option<Sidecar>) {
+    if let Some(s) = sidecar.take() {
+        let pid = s.pid;
+        eprintln!("[tauri] Killing Flask sidecar process tree (PID {pid})...");
+
+        // 1. Kill child processes spawned by the sidecar (PyInstaller subprocess).
+        #[cfg(unix)]
+        {
+            let _ = std::process::Command::new("pkill")
+                .args(["-KILL", "-P", &pid.to_string()])
+                .status();
+        }
+        #[cfg(windows)]
+        {
+            // taskkill /T kills the entire process tree rooted at the given PID.
+            let _ = std::process::Command::new("taskkill")
+                .args(["/T", "/F", "/PID", &pid.to_string()])
+                .status();
+        }
+
+        // 2. Kill the sidecar bootloader process itself.
+        let _ = s.child.kill();
+    }
+}
+
+/// Kill any stale flask-backend processes left over from a previous run that
+/// didn't shut down cleanly (e.g. crash, SIGKILL without cleanup).
+#[cfg(not(debug_assertions))]
+fn cleanup_stale_sidecars() {
+    eprintln!("[tauri] Cleaning up stale flask-backend processes...");
+    #[cfg(unix)]
+    {
+        let _ = std::process::Command::new("pkill")
+            .args(["-KILL", "flask-backend"])
+            .status();
+    }
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/IM", "flask-backend.exe"])
+            .status();
+    }
+}
+
 pub fn run() {
+    // Clean up stale sidecar processes from previous runs before spawning a new one.
+    #[cfg(not(debug_assertions))]
+    cleanup_stale_sidecars();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -33,11 +96,10 @@ pub fn run() {
 
                 let (_rx, child) = sidecar.spawn().expect("failed to spawn sidecar");
 
-                // Keep the child handle in managed state so it outlives setup
-                // and can be killed when the app exits.
-                app.manage(Mutex::new(Some(child)));
+                let pid = child.pid();
+                eprintln!("[tauri] Flask sidecar started (PID {pid}) with data-dir: {app_data_dir:?}");
 
-                eprintln!("[tauri] Flask sidecar started with data-dir: {:?}", app_data_dir);
+                app.manage(Mutex::new(Some(Sidecar { child, pid })));
             }
 
             Ok(())
@@ -45,18 +107,27 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
-            // Kill the sidecar on app exit. RunEvent::Exit fires exactly once
-            // regardless of how the app closes (window close, force quit, etc.),
-            // which is more reliable than WindowEvent::Destroyed.
-            if let tauri::RunEvent::Exit = event {
-                if let Some(state) = app_handle.try_state::<Mutex<Option<CommandChild>>>() {
-                    if let Ok(mut guard) = state.lock() {
-                        if let Some(child) = guard.take() {
-                            eprintln!("[tauri] Killing Flask sidecar...");
-                            let _ = child.kill();
+            match event {
+                // Kill sidecar when the window is destroyed (normal close).
+                tauri::RunEvent::WindowEvent {
+                    event: tauri::WindowEvent::Destroyed,
+                    ..
+                } => {
+                    if let Some(state) = app_handle.try_state::<Mutex<Option<Sidecar>>>() {
+                        if let Ok(mut guard) = state.lock() {
+                            kill_sidecar(&mut guard);
                         }
                     }
                 }
+                // Also kill on app exit as a final safety net.
+                tauri::RunEvent::Exit => {
+                    if let Some(state) = app_handle.try_state::<Mutex<Option<Sidecar>>>() {
+                        if let Ok(mut guard) = state.lock() {
+                            kill_sidecar(&mut guard);
+                        }
+                    }
+                }
+                _ => {}
             }
         });
 }

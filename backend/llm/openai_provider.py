@@ -122,3 +122,14 @@ class OpenAIProvider(LLMProvider):
         except Exception as e:
             logger.exception("OpenAI streaming error")
             yield StreamChunk(type="error", content=str(e))
+
+    @staticmethod
+    def list_models(api_key="", **kwargs):
+        client = openai.OpenAI(api_key=api_key)
+        chat_prefixes = ("gpt-", "o1", "o3", "o4", "chatgpt")
+        models = []
+        for model in client.models.list():
+            if model.id.startswith(chat_prefixes):
+                models.append({"id": model.id})
+        models.sort(key=lambda m: m["id"])
+        return models

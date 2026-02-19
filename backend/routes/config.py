@@ -13,7 +13,7 @@ from backend.config_manager import (
     get_llm_config,
     get_integration_config
 )
-from backend.llm.factory import create_provider
+from backend.llm.factory import create_provider, PROVIDERS
 import logging
 
 logger = logging.getLogger(__name__)
@@ -171,6 +171,42 @@ def test_connection():
     except Exception as e:
         logger.error(f"Error testing connection: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@config_bp.route('/api/config/models', methods=['POST'])
+def list_models():
+    """
+    List available models for a given provider.
+
+    Request body:
+    - provider: LLM provider name
+    - api_key: API key (optional for ollama)
+
+    Returns:
+        JSON response with models list (always HTTP 200 for graceful fallback)
+    """
+    try:
+        data = request.get_json() or {}
+        provider_name = data.get('provider')
+        api_key = data.get('api_key', '')
+
+        if not provider_name:
+            return jsonify({"models": [], "error": "No provider specified"}), 200
+
+        provider_cls = PROVIDERS.get(provider_name)
+        if not provider_cls:
+            return jsonify({"models": [], "error": f"Unknown provider: {provider_name}"}), 200
+
+        try:
+            models = provider_cls.list_models(api_key=api_key)
+            return jsonify({"models": models}), 200
+        except Exception as e:
+            logger.warning("Failed to list models for %s: %s", provider_name, e)
+            return jsonify({"models": [], "error": str(e)}), 200
+
+    except Exception as e:
+        logger.error(f"Error listing models: {e}")
+        return jsonify({"models": [], "error": str(e)}), 200
 
 
 @config_bp.route('/api/config/providers', methods=['GET'])

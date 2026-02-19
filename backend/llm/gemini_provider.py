@@ -104,3 +104,19 @@ class GeminiProvider(LLMProvider):
         except Exception as e:
             logger.exception("Gemini streaming error")
             yield StreamChunk(type="error", content=str(e))
+
+    @staticmethod
+    def list_models(api_key="", **kwargs):
+        client = genai.Client(api_key=api_key)
+        models = []
+        for model in client.models.list():
+            supported = [a.value if hasattr(a, 'value') else str(a)
+                         for a in (model.supported_actions or [])]
+            if "generateContent" not in supported:
+                continue
+            model_id = model.name
+            if model_id.startswith("models/"):
+                model_id = model_id[len("models/"):]
+            models.append({"id": model_id, "name": model.display_name or model_id})
+        models.sort(key=lambda m: m["id"])
+        return models

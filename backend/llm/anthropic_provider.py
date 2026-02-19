@@ -90,3 +90,12 @@ class AnthropicProvider(LLMProvider):
         except Exception as e:
             logger.exception("Anthropic streaming error")
             yield StreamChunk(type="error", content=str(e))
+
+    @staticmethod
+    def list_models(api_key="", **kwargs):
+        client = anthropic.Anthropic(api_key=api_key)
+        models = []
+        for model in client.models.list():
+            models.append({"id": model.id, "name": getattr(model, "display_name", model.id)})
+        models.sort(key=lambda m: m["id"])
+        return models

@@ -102,3 +102,15 @@ class OllamaProvider(LLMProvider):
         except Exception as e:
             logger.exception("Ollama streaming error")
             yield StreamChunk(type="error", content=str(e))
+
+    @staticmethod
+    def list_models(api_key="", **kwargs):
+        base_url = kwargs.get("base_url", "http://localhost:11434").rstrip("/")
+        resp = requests.get(f"{base_url}/api/tags", timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        models = []
+        for m in data.get("models", []):
+            models.append({"id": m["name"]})
+        models.sort(key=lambda m: m["id"])
+        return models

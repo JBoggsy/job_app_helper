@@ -30,3 +30,16 @@ class LLMProvider(ABC):
             StreamChunk with type "text", "tool_calls", "done", or "error"
         """
         ...
+
+    @staticmethod
+    def list_models(api_key="", **kwargs):
+        """Return a list of available models from the provider.
+
+        Args:
+            api_key: API key for the provider
+            **kwargs: additional provider-specific arguments
+
+        Returns:
+            list[dict]: each dict has at minimum {"id": "model-name"}
+        """
+        raise NotImplementedError("list_models not implemented for this provider")

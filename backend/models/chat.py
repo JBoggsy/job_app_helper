@@ -16,8 +16,8 @@ class Conversation(db.Model):
         d = {
             "id": self.id,
             "title": self.title,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": (self.created_at.isoformat() + "+00:00") if self.created_at else None,
+            "updated_at": (self.updated_at.isoformat() + "+00:00") if self.updated_at else None,
         }
         if include_messages:
             d["messages"] = [m.to_dict() for m in self.messages]
@@ -41,5 +41,5 @@ class Message(db.Model):
             "role": self.role,
             "content": self.content,
             "tool_calls": json.loads(self.tool_calls) if self.tool_calls else None,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": (self.created_at.isoformat() + "+00:00") if self.created_at else None,
         }

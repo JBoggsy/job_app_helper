@@ -45,6 +45,6 @@ class Job(db.Model):
             "job_fit": self.job_fit,
             "requirements": self.requirements,
             "nice_to_haves": self.nice_to_haves,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": (self.created_at.isoformat() + "+00:00") if self.created_at else None,
+            "updated_at": (self.updated_at.isoformat() + "+00:00") if self.updated_at else None,
         }

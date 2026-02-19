@@ -7,18 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-02-19
+
 ### Added
-- **Resume uploading and parsing** — Users can upload a resume (PDF or DOCX) via the Profile panel. The file is parsed and stored so the AI agent can reference it when evaluating job fit and searching for jobs. New `read_resume` agent tool, `/api/resume` endpoints, and resume section in ProfilePanel.
 - **AI resume parsing agent** — After uploading a resume, an LLM-powered agent automatically cleans up the raw extracted text (fixing PDF artifacts, broken formatting, garbled characters) and structures it into JSON with contact info, work experience, education, skills, certifications, projects, and more. Structured data displayed in a rich preview in the Profile panel with Structured/Raw toggle and Re-parse button. New `POST /api/resume/parse` endpoint and `ResumeParsingAgent` class.
-- **Model name discovery** — Model override fields in Settings and Setup Wizard now show a searchable dropdown populated from each provider's API; gracefully falls back to free-text input when the API call fails or no key is entered yet
 
 ### Improved
 - **User-friendly error notifications** — LLM errors (quota exhaustion, invalid API key, rate limiting, timeouts, etc.) now appear as toast notifications instead of inline chat messages, with actionable guidance on how to fix each issue; raw technical details available behind a collapsible toggle
-- **Onboarding chat panel can now be closed** — Users can dismiss the chat panel during onboarding to explore the app or change settings; reopening resumes the conversation where it left off; AI Assistant button pulses to indicate an active onboarding session
+
+## [0.7.0] - 2026-02-19
+
+### Added
+- **Resume uploading and parsing** — Users can upload a resume (PDF or DOCX) via the Profile panel. The file is parsed and stored so the AI agent can reference it when evaluating job fit and searching for jobs. New `read_resume` agent tool, `/api/resume` endpoints, and resume section in ProfilePanel.
+
+### Fixed
+- **Onboarding resumption checks profile** — When the user closes and re-opens the app mid-onboarding, the agent now reads the existing profile and continues from where it left off instead of starting over. Uses a tri-state onboarding status (`not_started` / `in_progress` / `completed`) in the profile frontmatter.
+
+## [0.6.3] - 2026-02-19
 
 ### Fixed
 - **Flask sidecar not terminating on desktop app close** — PyInstaller `--onefile` binaries fork on Linux: the bootloader is the PID Tauri tracks, but the actual Flask process runs as a child. `CommandChild::kill()` only killed the bootloader, orphaning the Flask child. Now kills the full process tree via `pkill -KILL -P <pid>` (Unix) / `taskkill /T` (Windows) before killing the bootloader. Also cleans up stale sidecar processes on startup and handles both `WindowEvent::Destroyed` and `RunEvent::Exit` for belt-and-suspenders reliability.
-- **Onboarding resumption checks profile** — When the user closes and re-opens the app mid-onboarding, the agent now reads the existing profile and continues from where it left off instead of starting over. Uses a tri-state onboarding status (`not_started` / `in_progress` / `completed`) in the profile frontmatter.
+- **CI uv cache causing false build failures** — Disabled uv cache in CI workflows to prevent stale cache entries from breaking builds
+
+## [0.6.2] - 2026-02-19
+
+### Added
+- **Model name discovery** — Model override fields in Settings and Setup Wizard now show a searchable dropdown populated from each provider's API; gracefully falls back to free-text input when the API call fails or no key is entered yet
+
+### Improved
+- **Onboarding chat panel can now be closed** — Users can dismiss the chat panel during onboarding to explore the app or change settings; reopening resumes the conversation where it left off; AI Assistant button pulses to indicate an active onboarding session
+
+### Fixed
+- **Masked API keys sent to model discovery endpoint** — The model dropdown was failing with 401 errors because the Settings panel was sending masked API keys (e.g. `sk-a****xyz`) to the models endpoint; the backend now resolves the real key from config when it detects a masked value
 
 ## [0.6.1] - 2026-02-18
 
@@ -47,6 +67,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **scrape_url 403 errors** — Replaced bare User-Agent with a pool of realistic browser User-Agent strings, added browser-like headers, and retry logic (up to 3 attempts with UA rotation) to reduce blocks from job posting sites
 
 ## [0.4.2] - 2026-02-18
+
+### Fixed
+- **CI/CD workflow build failures** — Resolved issues in the release and CI workflows that caused builds to fail
+
+## [0.4.1] - 2026-02-18
 
 ### Added
 

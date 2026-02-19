@@ -9,6 +9,7 @@
   (step-by-step instructions + direct links) for all API key fields in both the wizard and Settings
   panel
 - [x] **Onboarding resumption checks profile** — Tri-state onboarding status (`not_started`/`in_progress`/`completed`) in profile frontmatter; agent reads existing profile and continues from where it left off when user reopens mid-onboarding
+- [x] **User-friendly error notifications** — Toast notification system with error classification; LLM errors shown as actionable toasts instead of chat messages
 
 
 ## Features

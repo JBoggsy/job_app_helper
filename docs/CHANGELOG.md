@@ -11,12 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Resume uploading and parsing** — Users can upload a resume (PDF or DOCX) via the Profile panel. The file is parsed and stored so the AI agent can reference it when evaluating job fit and searching for jobs. New `read_resume` agent tool, `/api/resume` endpoints, and resume section in ProfilePanel.
 - **Model name discovery** — Model override fields in Settings and Setup Wizard now show a searchable dropdown populated from each provider's API; gracefully falls back to free-text input when the API call fails or no key is entered yet
 
+### Improved
+- **User-friendly error notifications** — LLM errors (quota exhaustion, invalid API key, rate limiting, timeouts, etc.) now appear as toast notifications instead of inline chat messages, with actionable guidance on how to fix each issue; raw technical details available behind a collapsible toggle
+- **Onboarding chat panel can now be closed** — Users can dismiss the chat panel during onboarding to explore the app or change settings; reopening resumes the conversation where it left off; AI Assistant button pulses to indicate an active onboarding session
+
 ### Fixed
 - **Flask sidecar not terminating on desktop app close** — PyInstaller `--onefile` binaries fork on Linux: the bootloader is the PID Tauri tracks, but the actual Flask process runs as a child. `CommandChild::kill()` only killed the bootloader, orphaning the Flask child. Now kills the full process tree via `pkill -KILL -P <pid>` (Unix) / `taskkill /T` (Windows) before killing the bootloader. Also cleans up stale sidecar processes on startup and handles both `WindowEvent::Destroyed` and `RunEvent::Exit` for belt-and-suspenders reliability.
 - **Onboarding resumption checks profile** — When the user closes and re-opens the app mid-onboarding, the agent now reads the existing profile and continues from where it left off instead of starting over. Uses a tri-state onboarding status (`not_started` / `in_progress` / `completed`) in the profile frontmatter.
-
-### Improved
-- **Onboarding chat panel can now be closed** — Users can dismiss the chat panel during onboarding to explore the app or change settings; reopening resumes the conversation where it left off; AI Assistant button pulses to indicate an active onboarding session
 
 ## [0.6.1] - 2026-02-18
 

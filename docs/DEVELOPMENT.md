@@ -103,14 +103,17 @@ job_app_helper/
 │       ├── api.js                 # Centralized API client
 │       ├── pages/
 │       │   └── JobList.jsx        # Main dashboard
-│       └── components/
-│           ├── JobForm.jsx        # Create/edit job form
-│           ├── ChatPanel.jsx      # AI assistant slide-out panel
-│           ├── ProfilePanel.jsx   # User profile slide-out panel
-│           ├── SettingsPanel.jsx  # Settings configuration panel (includes ApiKeyGuide sub-component)
-│           ├── SetupWizard.jsx    # First-time setup wizard (4-step modal)
-│           ├── HelpPanel.jsx      # Help panel with guides and tips
-│           └── UpdateBanner.jsx   # Auto-update notification banner (Tauri desktop only)
+│       ├── components/
+│       │   ├── JobForm.jsx        # Create/edit job form
+│       │   ├── ChatPanel.jsx      # AI assistant slide-out panel
+│       │   ├── ProfilePanel.jsx   # User profile slide-out panel
+│       │   ├── SettingsPanel.jsx  # Settings configuration panel (includes ApiKeyGuide sub-component)
+│       │   ├── SetupWizard.jsx    # First-time setup wizard (4-step modal)
+│       │   ├── HelpPanel.jsx      # Help panel with guides and tips
+│       │   ├── Toast.jsx          # Toast notification system (useToast hook, ToastContainer)
+│       │   └── UpdateBanner.jsx   # Auto-update notification banner (Tauri desktop only)
+│       └── utils/
+│           └── errorClassifier.js # Maps LLM/network errors to user-friendly messages
 ├── src-tauri/                     # Tauri desktop wrapper
 │   ├── tauri.conf.json            # Tauri configuration
 │   ├── Cargo.toml                 # Rust dependencies
@@ -206,6 +209,10 @@ job_app_helper/
 **`frontend/src/components/SettingsPanel.jsx`**: Slide-out settings panel for configuring LLM provider, API keys, and integrations. Includes "Test Connection" functionality and saves to config.json. Contains `ApiKeyGuide` sub-component that renders expandable step-by-step instructions and a direct link for each key field (Anthropic, OpenAI, Gemini, Tavily, JSearch, Adzuna); renders nothing for Ollama (no key required).
 
 **`frontend/src/components/SetupWizard.jsx`**: Centered modal wizard for first-time setup. Four steps: welcome, provider selection (2×2 card grid), API key entry with always-visible inline how-to guide and test connection, and a done screen that launches onboarding. Requires a successful connection test before allowing the user to continue (Ollama skips the key requirement). Calls `onComplete()` to open onboarding chat or `onClose()` to dismiss.
+
+**`frontend/src/components/Toast.jsx`**: Toast notification system (`useToast` hook and `ToastContainer` component). Supports error, warning, and info types with collapsible technical details. Error toasts require manual dismissal; others auto-dismiss after 5 seconds.
+
+**`frontend/src/utils/errorClassifier.js`**: Maps raw LLM/network error strings to user-friendly toast messages with actionable guidance. Uses regex matchers to classify errors (invalid API key, quota exhaustion, rate limiting, timeouts, model not found, etc.) and returns structured `{ type, title, message, detail }` objects for the toast system.
 
 ## Development Setup
 

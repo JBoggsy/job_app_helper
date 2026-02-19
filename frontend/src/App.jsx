@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import JobList from "./pages/JobList";
 import ChatPanel from "./components/ChatPanel";
 import ProfilePanel from "./components/ProfilePanel";
@@ -6,6 +6,8 @@ import SettingsPanel from "./components/SettingsPanel";
 import HelpPanel from "./components/HelpPanel";
 import UpdateBanner from "./components/UpdateBanner";
 import SetupWizard from "./components/SetupWizard";
+import { ToastContainer, useToast } from "./components/Toast";
+import { classifyError, classifyNetworkError } from "./utils/errorClassifier";
 import { fetchOnboardingStatus, fetchHealth } from "./api";
 
 function App() {
@@ -51,6 +53,14 @@ function App() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [jobsVersion, setJobsVersion] = useState(0);
   const [updateInfo, setUpdateInfo] = useState(null);
+  const { toasts, addToast, removeToast } = useToast();
+
+  const handleChatError = useCallback((rawMessage, source) => {
+    const classified = source === "network"
+      ? classifyNetworkError(new Error(rawMessage))
+      : classifyError(rawMessage);
+    addToast(classified);
+  }, [addToast]);
 
   function handleJobsChanged() {
     setJobsVersion((v) => v + 1);
@@ -186,6 +196,7 @@ function App() {
         onboarding={onboarding}
         onOnboardingComplete={handleOnboardingComplete}
         onJobsChanged={handleJobsChanged}
+        onError={handleChatError}
       />
       <ProfilePanel isOpen={profileOpen} onClose={() => setProfileOpen(false)} />
       <HelpPanel isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
@@ -199,6 +210,7 @@ function App() {
         onClose={handleWizardClose}
         onComplete={handleWizardComplete}
       />
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );
 }

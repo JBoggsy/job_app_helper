@@ -92,6 +92,8 @@ The start scripts handle everything automatically. Use the manual commands below
 - `frontend/src/components/ModelCombobox.jsx` — Searchable combobox for model selection; fetches available models from provider API, with client-side cache (5-min TTL) and graceful fallback to free-text input on error
 - `frontend/src/components/HelpPanel.jsx` — Slide-out help panel with Getting Started, Job Tracking, AI Chat, API Key Guides, and Troubleshooting sections
 - `frontend/src/components/UpdateBanner.jsx` — Auto-update notification banner (Tauri desktop only); shows version info, download progress, and restart button
+- `frontend/src/components/Toast.jsx` — Toast notification system (`useToast` hook, `ToastContainer` component); used for error notifications with collapsible technical details
+- `frontend/src/utils/errorClassifier.js` — Maps raw LLM/network error strings to user-friendly toast messages with actionable guidance (`classifyError`, `classifyNetworkError`)
 
 ### Tauri (Desktop Wrapper)
 - `src-tauri/tauri.conf.json` — Tauri configuration (build commands, window settings, sidecar config)
@@ -278,7 +280,7 @@ Environment variables are checked first, then `config.json`. Useful for developm
 ## CI/CD & Releases
 
 ### Creating a Release
-1. Ensure version is updated in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`
+1. Ensure version is updated in `package.json`, `frontend/package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `pyproject.toml`
 2. Tag and push:
    ```bash
    git tag v0.4.0

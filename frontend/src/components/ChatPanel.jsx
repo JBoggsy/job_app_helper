@@ -15,7 +15,7 @@ import {
 // Tool names that modify job data — when these complete, notify parent to refresh
 const JOB_MUTATING_TOOLS = new Set(["create_job"]);
 
-function ChatPanel({ isOpen, onClose, onboarding = false, onOnboardingComplete, onJobsChanged }) {
+function ChatPanel({ isOpen, onClose, onboarding = false, onOnboardingComplete, onJobsChanged, onError }) {
   const [conversations, setConversations] = useState([]);
   const [currentConversation, setCurrentConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -77,10 +77,7 @@ function ChatPanel({ isOpen, onClose, onboarding = false, onOnboardingComplete, 
           await kickOnboarding(convo.id, (event) => {
             if (cancelled) return;
             if (event.event === "error") {
-              if (!fullText) {
-                fullText = `Error: ${event.data.message}`;
-                segments.push({ type: "text", content: fullText });
-              }
+              if (onError) onError(event.data.message);
               pushUpdate();
             } else if (event.event === "text_delta") {
               fullText += event.data.content;
@@ -112,6 +109,10 @@ function ChatPanel({ isOpen, onClose, onboarding = false, onOnboardingComplete, 
           }, { signal: abortController.signal });
 
           if (cancelled) return;
+          // Remove empty assistant placeholder if no content was generated
+          if (!fullText && segments.length === 0) {
+            setMessages([]);
+          }
           abortControllerRef.current = null;
           setIsStreaming(false);
           if (onboardingDone && onOnboardingComplete) {
@@ -127,6 +128,7 @@ function ChatPanel({ isOpen, onClose, onboarding = false, onOnboardingComplete, 
           }
           console.error("Failed to start onboarding:", e);
           if (!cancelled) {
+            if (onError) onError(e.message || String(e), "network");
             abortControllerRef.current = null;
             setIsStreaming(false);
           }
@@ -284,10 +286,7 @@ function ChatPanel({ isOpen, onClose, onboarding = false, onOnboardingComplete, 
         } else if (event.event === "onboarding_complete") {
           onboardingDone = true;
         } else if (event.event === "error") {
-          if (!fullText) {
-            fullText = `Error: ${event.data.message}`;
-            segments.push({ type: "text", content: fullText });
-          }
+          if (onError) onError(event.data.message);
           pushUpdate();
         }
       }, { signal: abortController.signal });
@@ -300,11 +299,13 @@ function ChatPanel({ isOpen, onClose, onboarding = false, onOnboardingComplete, 
         return;
       }
       console.error("Stream error:", e);
-      if (!fullText) {
-        fullText = "Failed to get response. Check your API configuration.";
-        segments.push({ type: "text", content: fullText });
-      }
+      if (onError) onError(e.message || String(e), "network");
       pushUpdate();
+    }
+
+    // Remove the empty assistant placeholder if no content was generated (error case)
+    if (!fullText && segments.length === 0) {
+      setMessages((prev) => prev.filter((_, idx) => idx !== assistantIdx));
     }
 
     abortControllerRef.current = null;

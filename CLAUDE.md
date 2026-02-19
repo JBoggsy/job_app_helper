@@ -73,7 +73,7 @@ The start scripts handle everything automatically. Use the manual commands below
 - `backend/llm/factory.py` — `create_provider()` factory function
 - `backend/agent/tools.py` — `AgentTools` class + `TOOL_DEFINITIONS` (web_search, job_search, scrape_url, create_job, list_jobs, read_user_profile, update_user_profile)
 - `backend/agent/agent.py` — `Agent` class with iterative tool-calling loop; `OnboardingAgent` for user profile interview; injects user profile into system prompt
-- `backend/agent/user_profile.py` — User profile markdown file management with YAML frontmatter (onboarded flag), read/write/onboarding helpers
+- `backend/agent/user_profile.py` — User profile markdown file management with YAML frontmatter (onboarded flag with tri-state: `false`/`in_progress`/`true`), read/write/onboarding helpers
 
 ### Frontend
 - `frontend/vite.config.js` — Vite config (React plugin, Tailwind CSS plugin, API proxy, Tauri-compatible settings)
@@ -219,13 +219,15 @@ Environment variables are checked first, then `config.json`. Useful for developm
 - `main.py --data-dir /path` sets `DATA_DIR` before app import; Tauri passes its `appDataDir` this way
 - SQLite database file is `app.db` in the data directory (gitignored, auto-created)
 - User profile file is `user_profile.md` in the data directory (gitignored, auto-created with default template)
-- User profile uses YAML frontmatter for metadata (`onboarded: true/false`); body is markdown
+- User profile uses YAML frontmatter for metadata (`onboarded: false/in_progress/true`); body is markdown
 
 ### User Onboarding Flow
 - On first visit, if LLM is not configured, Settings panel auto-opens
 - After saving settings, if user hasn't been onboarded, the onboarding interview auto-starts
 - Onboarding uses a separate LLM config (`onboarding_llm.*` in `config.json`) so a cheaper model can be used
 - The AI agent interviews the user and fills their profile via the `update_user_profile` tool
+- Onboarding state is tracked in the profile frontmatter as a tri-state: `false` → `in_progress` → `true`
+- If the user closes the app mid-onboarding (`in_progress`), reopening detects this and resumes onboarding with a contextual kick message so the agent continues from where it left off instead of restarting
 - Users can view and manually edit their profile anytime via the Profile panel in the UI
 - The AI agent reads the user profile on every turn and injects it into the system prompt
 - The agent proactively extracts job-search-relevant info from user messages and updates the profile

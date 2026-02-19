@@ -4,6 +4,7 @@ import logging
 from flask import Blueprint, Response, current_app, request, stream_with_context
 
 from backend.agent.agent import Agent, OnboardingAgent
+from backend.agent.user_profile import is_onboarding_in_progress, set_onboarding_in_progress
 from backend.config_manager import get_llm_config, get_onboarding_llm_config, get_integration_config
 from backend.database import db
 from backend.llm.factory import create_provider
@@ -299,7 +300,17 @@ def kick_onboarding():
 
     # Inject a synthetic user message to trigger the agent's greeting.
     # LLM providers require at least one user message.
-    kick_text = "Hi! I'm new here."
+    # Use a different message when resuming a previously started onboarding.
+    resuming = is_onboarding_in_progress()
+    if resuming:
+        kick_text = ("Hi! I started the onboarding interview before but didn't finish. "
+                     "Please review my profile and continue from where we left off.")
+    else:
+        kick_text = "Hi! I'm new here."
+
+    # Mark onboarding as in-progress (so resumption works if user leaves mid-interview)
+    set_onboarding_in_progress()
+
     kick_msg = Message(conversation_id=convo_id, role="user", content=kick_text)
     db.session.add(kick_msg)
     db.session.commit()

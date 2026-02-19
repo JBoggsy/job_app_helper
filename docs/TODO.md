@@ -5,8 +5,11 @@
 - [x] **Make tool use errors less scary** — amber warning icon with collapsible details instead of red error blocks
 - [x] **Improve onboarding intro message** — agent coaches users to give detailed, full-sentence answers
 - [x] **Clarify API key requirements** — Tavily marked as recommended, help text updated across Settings/Help/Installation
+- [x] **Simplify API key acquisition** — Added first-time setup wizard with inline how-to guides
+  (step-by-step instructions + direct links) for all API key fields in both the wizard and Settings
+  panel
+- [x] **Onboarding resumption checks profile** — Tri-state onboarding status (`not_started`/`in_progress`/`completed`) in profile frontmatter; agent reads existing profile and continues from where it left off when user reopens mid-onboarding
 
-- [x] **Simplify API key acquisition** — Added first-time setup wizard with inline how-to guides (step-by-step instructions + direct links) for all API key fields in both the wizard and Settings panel
 
 ## Features
 

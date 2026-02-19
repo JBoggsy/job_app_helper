@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Flask sidecar not terminating on desktop app close** — PyInstaller `--onefile` binaries fork on Linux: the bootloader is the PID Tauri tracks, but the actual Flask process runs as a child. `CommandChild::kill()` only killed the bootloader, orphaning the Flask child. Now kills the full process tree via `pkill -KILL -P <pid>` (Unix) / `taskkill /T` (Windows) before killing the bootloader. Also cleans up stale sidecar processes on startup and handles both `WindowEvent::Destroyed` and `RunEvent::Exit` for belt-and-suspenders reliability.
+- **Onboarding resumption checks profile** — When the user closes and re-opens the app mid-onboarding, the agent now reads the existing profile and continues from where it left off instead of starting over. Uses a tri-state onboarding status (`not_started` / `in_progress` / `completed`) in the profile frontmatter.
 
 ### Improved
 - **Onboarding chat panel can now be closed** — Users can dismiss the chat panel during onboarding to explore the app or change settings; reopening resumes the conversation where it left off; AI Assistant button pulses to indicate an active onboarding session

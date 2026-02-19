@@ -7,6 +7,8 @@ from backend.agent.user_profile import (
     ensure_profile_exists,
     is_onboarded,
     set_onboarded,
+    get_onboarding_state,
+    set_onboarding_in_progress,
 )
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/api/profile")
@@ -31,7 +33,7 @@ def update_profile():
 @profile_bp.route("/onboarding-status", methods=["GET"])
 def onboarding_status():
     ensure_profile_exists()
-    return {"onboarded": is_onboarded()}
+    return {"onboarded": is_onboarded(), "onboarding_state": get_onboarding_state()}
 
 
 @profile_bp.route("/onboarding-status", methods=["POST"])
@@ -39,4 +41,4 @@ def update_onboarding_status():
     data = request.get_json()
     if data and "onboarded" in data:
         set_onboarded(bool(data["onboarded"]))
-    return {"onboarded": is_onboarded()}
+    return {"onboarded": is_onboarded(), "onboarding_state": get_onboarding_state()}

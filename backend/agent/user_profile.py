@@ -132,19 +132,44 @@ def ensure_profile_exists() -> None:
             f.write(DEFAULT_PROFILE_TEMPLATE)
 
 
-def is_onboarded() -> bool:
-    """Return True if the user has completed onboarding."""
+def get_onboarding_state() -> str:
+    """Return the onboarding state: 'not_started', 'in_progress', or 'completed'."""
     path = get_profile_path()
     if not os.path.exists(path):
-        return False
+        return "not_started"
     with open(path, "r", encoding="utf-8") as f:
         content = f.read()
     meta, _ = _parse_frontmatter(content)
-    return bool(meta.get("onboarded", False))
+    val = meta.get("onboarded", False)
+    if val is True:
+        return "completed"
+    if val == "in_progress":
+        return "in_progress"
+    return "not_started"
+
+
+def is_onboarded() -> bool:
+    """Return True if the user has completed onboarding."""
+    return get_onboarding_state() == "completed"
+
+
+def is_onboarding_in_progress() -> bool:
+    """Return True if onboarding was started but not completed."""
+    return get_onboarding_state() == "in_progress"
+
+
+def set_onboarding_in_progress() -> None:
+    """Mark onboarding as started but not yet completed."""
+    _set_onboarded_value("in_progress")
 
 
 def set_onboarded(value: bool = True) -> None:
     """Set the onboarded flag in the profile frontmatter."""
+    _set_onboarded_value(value)
+
+
+def _set_onboarded_value(value) -> None:
+    """Set the onboarded field to an arbitrary value (bool or string)."""
     ensure_profile_exists()
     path = get_profile_path()
     with open(path, "r", encoding="utf-8") as f:

@@ -68,9 +68,9 @@ function App() {
 
       if (!llmConfigured) {
         // LLM not configured - check if user needs onboarding
-        const { onboarded } = await fetchOnboardingStatus();
-        if (!onboarded) {
-          // User needs onboarding but LLM not configured
+        const { onboarded, onboarding_state } = await fetchOnboardingStatus();
+        if (!onboarded || onboarding_state === "in_progress") {
+          // User needs onboarding (or was mid-onboarding) but LLM not configured
           // Open setup wizard and flag to start onboarding after
           setPendingOnboarding(true);
           setWizardOpen(true);
@@ -79,8 +79,8 @@ function App() {
         // They can open settings manually if they want to chat
       } else {
         // LLM is configured - check if user needs onboarding
-        const { onboarded } = await fetchOnboardingStatus();
-        if (!onboarded) {
+        const { onboarded, onboarding_state } = await fetchOnboardingStatus();
+        if (!onboarded || onboarding_state === "in_progress") {
           setOnboarding(true);
           setChatOpen(true);
         }

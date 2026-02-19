@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Timezone display bug** — Job timestamps now include explicit UTC offset (`+00:00`) so browsers parse them correctly instead of treating bare ISO strings as local time
+- **External links in Tauri desktop app** — Added `@tauri-apps/plugin-shell` and a global click interceptor in `App.jsx` that opens http/https/mailto links in the system browser; added `shell:allow-open` permission to Tauri capabilities
+- **scrape_url 403 errors** — Replaced bare User-Agent with a pool of realistic browser User-Agent strings, added browser-like headers, and retry logic (up to 3 attempts with UA rotation) to reduce blocks from job posting sites
+
 ## [0.4.2] - 2026-02-18
 
 ### Added

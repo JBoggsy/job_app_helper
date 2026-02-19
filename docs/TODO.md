@@ -1,20 +1,5 @@
 # TODO
 
-## Urgent Bugfixes
-
-- [ ] **Date Added column shows wrong timezone**
-  - Jobs added on 2/18 display as 2/19 — likely storing/displaying UTC instead of local time
-  - Need to convert timestamps to user's local timezone in the frontend
-
-- [ ] **Links in Tauri desktop app don't open web browser**
-  - Clicking URLs (e.g., job posting links) does nothing in the Tauri app
-  - Need to use Tauri's shell `open` API to open links in the user's default browser
-
-- [ ] **scrape_url tool frequently gets 403 errors**
-  - Many job posting sites block simple HTTP requests (LinkedIn, Greenhouse, etc.)
-  - Investigate adding proper User-Agent headers, retry logic, or a headless browser fallback
-  - Consider using a different scraping approach for known problematic domains
-
 ## UX Improvements
 
 - [ ] **Make tool use errors less scary**

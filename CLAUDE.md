@@ -79,7 +79,7 @@ The start scripts handle everything automatically. Use the manual commands below
 - `frontend/vite.config.js` — Vite config (React plugin, Tailwind CSS plugin, API proxy, Tauri-compatible settings)
 - `frontend/src/main.jsx` — React entry point
 - `frontend/src/index.css` — Tailwind CSS base import
-- `frontend/src/App.jsx` — App shell with header, layout, settings auto-open, and onboarding auto-start
+- `frontend/src/App.jsx` — App shell with header, layout, settings auto-open, onboarding auto-start, and Tauri external link interceptor (opens http/https/mailto links in system browser)
 - `frontend/src/api.js` — API helper with `getApiBase()` for Tauri URL resolution (`fetchJobs`, `createJob`, `updateJob`, `deleteJob`, chat functions, `streamMessage`, `fetchProfile`, `updateProfile`, config functions, onboarding functions)
 - `frontend/src/pages/JobList.jsx` — Main dashboard: job table with status badges, add/edit/delete
 - `frontend/src/components/JobForm.jsx` — Reusable form for creating and editing jobs
@@ -94,7 +94,7 @@ The start scripts handle everything automatically. Use the manual commands below
 - `src-tauri/build.rs` — Tauri build script
 - `src-tauri/src/main.rs` — Rust entry point
 - `src-tauri/src/lib.rs` — Sidecar launch logic (spawns Flask backend with `--data-dir` pointing to appDataDir)
-- `src-tauri/capabilities/default.json` — Shell permissions for sidecar spawning
+- `src-tauri/capabilities/default.json` — Shell permissions for sidecar spawning and opening external URLs
 
 ### CI/CD
 - `.github/workflows/release.yml` — builds Tauri app for all platforms on `v*` tag push, creates draft GitHub Release

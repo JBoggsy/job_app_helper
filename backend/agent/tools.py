@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import random
 from datetime import date
 
 import requests
@@ -352,10 +353,39 @@ class AgentTools:
         logger.info("jsearch search: returned %d results", len(results))
         return {"results": results, "provider": "jsearch", "total": len(results)}
 
+    _USER_AGENTS = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
+    ]
+
     def _scrape_url(self, url):
         logger.info("scrape_url: %s", url)
-        resp = requests.get(url, timeout=20, headers={"User-Agent": "JobAppHelper/1.0"})
-        resp.raise_for_status()
+        headers = {
+            "User-Agent": random.choice(self._USER_AGENTS),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+        }
+        last_error = None
+        for attempt in range(3):
+            try:
+                if attempt > 0:
+                    headers["User-Agent"] = random.choice(self._USER_AGENTS)
+                resp = requests.get(url, timeout=20, headers=headers)
+                resp.raise_for_status()
+                break
+            except requests.HTTPError as e:
+                last_error = e
+                if resp.status_code == 403 and attempt < 2:
+                    logger.info("scrape_url: 403 on attempt %d, retrying %s", attempt + 1, url)
+                    continue
+                raise
         soup = BeautifulSoup(resp.text, "html.parser")
         for tag in soup(["script", "style", "nav", "footer", "header"]):
             tag.decompose()

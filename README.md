@@ -16,6 +16,7 @@ Job Application Helper helps you organize your job search. Track applications th
 - **User Profile System**: Personalized onboarding interview to understand your job preferences and goals
 - **Rich Job Details**: Track salary ranges, location, remote type, requirements, contact info, and more
 - **Job Fit Ratings**: Rate how well each job matches your profile (0-5 stars)
+- **Guided Setup Wizard**: First-time setup walks you through choosing a provider and entering your API key, with inline step-by-step instructions for each key
 - **Desktop App**: Download and install—no programming tools required. Also runs as a web app from source.
 
 ## Download
@@ -28,7 +29,7 @@ Download the latest desktop app from [GitHub Releases](https://github.com/JBoggs
 | **macOS** | `.dmg` installer |
 | **Linux** | `.deb`, `.rpm`, or `.AppImage` |
 
-Install it, launch it, and the Settings panel will guide you through entering your API key. See the [Installation Guide](docs/INSTALLATION.md) for detailed step-by-step instructions.
+Install it, launch it, and a setup wizard will guide you through choosing an AI provider and entering your API key — with inline instructions for every key. See the [Installation Guide](docs/INSTALLATION.md) for detailed step-by-step instructions.
 
 ### Run from Source (Alternative)
 
@@ -129,7 +130,7 @@ See [`docs/config.example.json`](docs/config.example.json) for the complete conf
 ## Getting Started
 
 1. **Download and install** — Get the app from [GitHub Releases](https://github.com/JBoggsy/job_app_helper/releases) (or [run from source](#run-from-source-alternative))
-2. **Enter your API key** — On first launch, the Settings panel opens automatically. Choose an AI provider and enter your API key ([guide](docs/INSTALLATION.md#getting-your-api-keys))
+2. **Enter your API key** — On first launch, a setup wizard opens automatically. Choose an AI provider, follow the inline instructions to get your API key, and test the connection before continuing
 3. **Complete onboarding** — The AI assistant will interview you to build your job search profile
 4. **Add jobs manually** — Click "Add Job" to create entries from the dashboard
 5. **Use the AI assistant** — Click the chat icon to open the assistant panel:

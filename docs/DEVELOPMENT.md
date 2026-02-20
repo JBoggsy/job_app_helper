@@ -46,7 +46,7 @@ The Shortlist is built as a full-stack web application with a clear separation b
 - **Tavily API**: Web search integration
 - **Adzuna API**: Job board search (optional)
 - **JSearch API**: Job board search via RapidAPI (optional, preferred over Adzuna)
-- **BeautifulSoup**: HTML parsing for web scraping
+- **cloudscraper + BeautifulSoup**: Web scraping with Cloudflare bypass and HTML parsing (falls back to Tavily Extract API on failure)
 
 ### Frontend
 - **React 19**: UI library with functional components and hooks

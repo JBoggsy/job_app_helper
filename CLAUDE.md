@@ -12,7 +12,7 @@ Available as a downloadable desktop app (via Tauri — the primary distribution 
 
 - **Backend:** Python 3.12+, Flask, Flask-SQLAlchemy, SQLite
 - **LLM providers:** Anthropic, OpenAI, Google Gemini, Ollama (configurable via Settings UI or env vars)
-- **Agent tools:** Tavily search API, BeautifulSoup web scraping, JSearch/Adzuna job search
+- **Agent tools:** Tavily search API, cloudscraper + BeautifulSoup web scraping (with Tavily Extract fallback), JSearch/Adzuna job search
 - **Frontend:** React 19, Vite, Tailwind CSS 4
 - **Desktop wrapper:** Tauri v2 (sidecar approach — Flask as child process, React in native webview)
 - **Package management:** uv (Python), npm (JS)

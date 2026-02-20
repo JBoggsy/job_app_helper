@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Resizable panels** — All slide-out panels (AI Assistant, Profile, Settings, Help) can now be resized by dragging their left edge; widths persist across sessions via localStorage
+
+### Improved
+- **Resilient web scraping** — Scrape tool now uses cloudscraper (handles Cloudflare anti-bot challenges), realistic Sec-* browser headers, updated User-Agents, random retry delays, and falls back to Tavily Extract API when direct scraping fails — significantly reducing 403 errors on job posting sites
+
 ## [0.7.1] - 2026-02-19
 
 ### Added

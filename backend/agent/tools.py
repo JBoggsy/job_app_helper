@@ -2,8 +2,10 @@ import json
 import logging
 import os
 import random
+import time
 from datetime import date
 
+import cloudscraper
 import requests
 from bs4 import BeautifulSoup
 
@@ -364,47 +366,103 @@ class AgentTools:
         return {"results": results, "provider": "jsearch", "total": len(results)}
 
     _USER_AGENTS = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0",
     ]
 
-    def _scrape_url(self, url):
-        logger.info("scrape_url: %s", url)
+    def _build_browser_headers(self, ua):
+        """Build realistic browser headers including Sec-* headers."""
+        is_chrome = "Chrome" in ua
         headers = {
-            "User-Agent": random.choice(self._USER_AGENTS),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "User-Agent": ua,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
             "DNT": "1",
             "Connection": "keep-alive",
             "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
         }
-        last_error = None
-        for attempt in range(3):
-            try:
-                if attempt > 0:
-                    headers["User-Agent"] = random.choice(self._USER_AGENTS)
-                resp = requests.get(url, timeout=20, headers=headers)
-                resp.raise_for_status()
-                break
-            except requests.HTTPError as e:
-                last_error = e
-                if resp.status_code == 403 and attempt < 2:
-                    logger.info("scrape_url: 403 on attempt %d, retrying %s", attempt + 1, url)
-                    continue
-                raise
-        soup = BeautifulSoup(resp.text, "html.parser")
-        for tag in soup(["script", "style", "nav", "footer", "header"]):
-            tag.decompose()
-        text = soup.get_text(separator="\n", strip=True)
+        if is_chrome:
+            headers["Sec-CH-UA"] = '"Chromium";v="133", "Not(A:Brand";v="99", "Google Chrome";v="133"'
+            headers["Sec-CH-UA-Mobile"] = "?0"
+            headers["Sec-CH-UA-Platform"] = '"Windows"' if "Windows" in ua else '"macOS"' if "Mac" in ua else '"Linux"'
+        return headers
+
+    def _scrape_url(self, url):
+        logger.info("scrape_url: %s", url)
+
+        # Strategy 1: cloudscraper session (handles Cloudflare challenges)
+        text = self._scrape_with_cloudscraper(url)
+
+        # Strategy 2: Tavily Extract API fallback
+        if text is None and self.search_api_key:
+            logger.info("scrape_url: trying Tavily extract fallback for %s", url)
+            text = self._scrape_with_tavily(url)
+
+        if text is None:
+            return {"error": f"Failed to scrape {url} — all strategies returned 403/blocked"}
+
         # Truncate to ~4000 chars to fit in LLM context
         if len(text) > 4000:
             text = text[:4000] + "\n...(truncated)"
         logger.info("scrape_url: extracted %d chars from %s", len(text), url)
         return {"content": text, "url": url}
+
+    def _scrape_with_cloudscraper(self, url):
+        """Scrape using cloudscraper with realistic headers and retry logic."""
+        scraper = cloudscraper.create_scraper(
+            browser={"browser": "chrome", "platform": "windows", "mobile": False},
+        )
+        for attempt in range(3):
+            try:
+                ua = random.choice(self._USER_AGENTS)
+                headers = self._build_browser_headers(ua)
+                if attempt > 0:
+                    time.sleep(1.5 + random.random() * 2)  # 1.5–3.5s delay between retries
+                resp = scraper.get(url, timeout=20, headers=headers)
+                resp.raise_for_status()
+                return self._extract_text(resp.text)
+            except Exception as e:
+                status = getattr(getattr(e, "response", None), "status_code", None) or getattr(e, "status_code", None)
+                logger.info("scrape_url: cloudscraper attempt %d failed (%s) for %s", attempt + 1, status or e, url)
+                if attempt == 2:
+                    logger.warning("scrape_url: cloudscraper exhausted retries for %s", url)
+        return None
+
+    def _scrape_with_tavily(self, url):
+        """Fallback: use Tavily Extract API to fetch page content."""
+        try:
+            resp = requests.post(
+                "https://api.tavily.com/extract",
+                json={"urls": url, "extract_depth": "basic"},
+                headers={"Authorization": f"Bearer {self.search_api_key}"},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            results = data.get("results", [])
+            if results and results[0].get("raw_content"):
+                logger.info("scrape_url: Tavily extract succeeded for %s", url)
+                return results[0]["raw_content"]
+            logger.info("scrape_url: Tavily extract returned empty for %s", url)
+        except Exception as e:
+            logger.warning("scrape_url: Tavily extract failed for %s: %s", url, e)
+        return None
+
+    @staticmethod
+    def _extract_text(html):
+        """Parse HTML and return clean text content."""
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup(["script", "style", "nav", "footer", "header"]):
+            tag.decompose()
+        return soup.get_text(separator="\n", strip=True)
 
     def _create_job(self, **kwargs):
         logger.info("create_job: company=%r title=%r", kwargs.get("company"), kwargs.get("title"))

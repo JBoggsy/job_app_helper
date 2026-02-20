@@ -1,6 +1,6 @@
 # Development Guide
 
-This document provides comprehensive technical documentation for developers and contributors working on the Job Application Helper project.
+This document provides comprehensive technical documentation for developers and contributors working on the Shortlist project.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ This document provides comprehensive technical documentation for developers and 
 
 ## Architecture Overview
 
-The Job Application Helper is built as a full-stack web application with a clear separation between frontend and backend:
+The Shortlist is built as a full-stack web application with a clear separation between frontend and backend:
 
 - **Backend (Flask)**: Provides REST API and Server-Sent Events (SSE) streaming for real-time AI responses. Handles data persistence via SQLAlchemy/SQLite and orchestrates the AI agent system.
 - **Frontend (React + Vite)**: Single-page application that consumes the backend API. Uses Tailwind CSS for styling and includes real-time chat with SSE streaming.
@@ -57,12 +57,14 @@ The Job Application Helper is built as a full-stack web application with a clear
 ### Desktop (Optional)
 - **Tauri v2**: Native desktop wrapper with webview
 - **tauri-plugin-shell**: Sidecar process management for Flask backend
+- **tauri-plugin-updater**: Auto-update checking and installation
+- **tauri-plugin-process**: Process restart after update
 - **PyInstaller**: Bundles Flask backend as standalone binary for distribution
 
 ## Project Structure
 
 ```
-job_app_helper/
+shortlist/
 ├── backend/
 │   ├── app.py                      # Flask app factory (create_app)
 │   ├── config.py                   # Configuration class with config file + env vars
@@ -93,9 +95,8 @@ job_app_helper/
 │       ├── agent.py               # Agent and OnboardingAgent classes
 │       └── user_profile.py        # User profile file management
 ├── frontend/
-│   ├── vite.config.js             # Vite config (React, Tailwind, proxy)
+│   ├── vite.config.js             # Vite config (React, Tailwind CSS plugin, proxy)
 │   ├── package.json
-│   ├── tailwind.config.js
 │   └── src/
 │       ├── main.jsx               # React entry point
 │       ├── index.css              # Tailwind imports
@@ -105,10 +106,12 @@ job_app_helper/
 │       │   └── JobList.jsx        # Main dashboard
 │       ├── components/
 │       │   ├── JobForm.jsx        # Create/edit job form
+│       │   ├── JobDetailPanel.jsx # Slide-out job detail viewer
 │       │   ├── ChatPanel.jsx      # AI assistant slide-out panel
 │       │   ├── ProfilePanel.jsx   # User profile slide-out panel
 │       │   ├── SettingsPanel.jsx  # Settings configuration panel (includes ApiKeyGuide sub-component)
 │       │   ├── SetupWizard.jsx    # First-time setup wizard (4-step modal)
+│       │   ├── ModelCombobox.jsx  # Searchable model selection combobox
 │       │   ├── HelpPanel.jsx      # Help panel with guides and tips
 │       │   ├── Toast.jsx          # Toast notification system (useToast hook, ToastContainer)
 │       │   └── UpdateBanner.jsx   # Auto-update notification banner (Tauri desktop only)
@@ -137,10 +140,17 @@ job_app_helper/
 │   │   ├── bug_report.md
 │   │   └── feature_request.md
 │   └── PULL_REQUEST_TEMPLATE.md
+├── docs/
+│   ├── INSTALLATION.md            # User-facing installation guide
+│   ├── DEVELOPMENT.md             # Developer guide (this file)
+│   ├── CONTRIBUTING.md            # Contribution guidelines
+│   ├── CHANGELOG.md               # Release changelog
+│   ├── TODO.md                    # Roadmap and planned features
+│   ├── config.example.json        # Example configuration template
+│   └── screenshots/               # App screenshots for README
 ├── main.py                        # Backend entry point (supports --data-dir and --port)
 ├── pyproject.toml                 # Python dependencies (uv)
 ├── config.json                    # User configuration (gitignored)
-├── config.example.json            # Example configuration template
 ├── app.db                         # SQLite database (gitignored)
 ├── user_profile.md                # User profile file (gitignored)
 └── CLAUDE.md                      # Claude Code instructions
@@ -202,11 +212,15 @@ job_app_helper/
 
 **`frontend/src/components/JobForm.jsx`**: Reusable form component for creating and editing jobs. Handles all job fields including requirements and nice-to-haves.
 
+**`frontend/src/components/JobDetailPanel.jsx`**: Slide-out panel that displays comprehensive job details including requirements, nice-to-haves, salary range, location, and job fit rating. Shows all fields in a read-only format with markdown rendering.
+
 **`frontend/src/components/ChatPanel.jsx`**: Slide-out AI assistant panel with SSE streaming, markdown rendering, and tool execution visibility. Includes `JOB_MUTATING_TOOLS` set for live job list refresh.
 
 **`frontend/src/components/ProfilePanel.jsx`**: Slide-out user profile viewer/editor panel with resume upload section (PDF/DOCX). Users can upload, preview (Structured/Raw toggle), replace, or remove their resume. Auto-triggers LLM parsing on upload; includes a Re-parse button. `StructuredResumeView` sub-component renders parsed JSON as a rich formatted view. Also supports manual profile markdown editing.
 
 **`frontend/src/components/SettingsPanel.jsx`**: Slide-out settings panel for configuring LLM provider, API keys, and integrations. Includes "Test Connection" functionality and saves to config.json. Contains `ApiKeyGuide` sub-component that renders expandable step-by-step instructions and a direct link for each key field (Anthropic, OpenAI, Gemini, Tavily, JSearch, Adzuna); renders nothing for Ollama (no key required).
+
+**`frontend/src/components/ModelCombobox.jsx`**: Searchable combobox for selecting an LLM model. Fetches available models from the provider's API with a client-side cache (5-minute TTL). Falls back to free-text input if the API call fails or no API key is entered yet.
 
 **`frontend/src/components/SetupWizard.jsx`**: Centered modal wizard for first-time setup. Four steps: welcome, provider selection (2×2 card grid), API key entry with always-visible inline how-to guide and test connection, and a done screen that launches onboarding. Requires a successful connection test before allowing the user to continue (Ollama skips the key requirement). Calls `onComplete()` to open onboarding chat or `onClose()` to dismiss.
 
@@ -220,7 +234,7 @@ job_app_helper/
 
 - **Python 3.12+**: Check with `python --version`
 - **Node.js 18+**: Check with `node --version`
-- **uv**: Install with `pip install uv` or via [standalone installer](https://github.com/astral-sh/uv)
+- **uv**: Install via [standalone installer](https://docs.astral.sh/uv/getting-started/installation/)
 - **npm**: Comes with Node.js
 
 ### Quick Start (Recommended for First-Time Setup)
@@ -264,10 +278,10 @@ This creates a virtual environment and installs all dependencies from `pyproject
 Configuration is managed through `config.json` (auto-created on first run). You can:
 
 - **Use the Settings UI** (recommended): Start the app and configure via the Settings panel
-- **Edit config.json manually**: Copy `config.example.json` to `config.json` and edit
+- **Edit config.json manually**: Copy `docs/config.example.json` to `config.json` and edit
 - **Use environment variables** (overrides config.json): Export in your shell
 
-**Example config.json:**
+**Example config.json** (see [`docs/config.example.json`](config.example.json) for the full template):
 ```json
 {
   "llm": {
@@ -275,11 +289,17 @@ Configuration is managed through `config.json` (auto-created on first run). You 
     "api_key": "your-api-key-here",
     "model": ""
   },
+  "onboarding_llm": {
+    "provider": "",
+    "api_key": "",
+    "model": ""
+  },
   "integrations": {
     "search_api_key": "",
     "jsearch_api_key": "",
     "adzuna_app_id": "",
-    "adzuna_app_key": ""
+    "adzuna_app_key": "",
+    "adzuna_country": "us"
   },
   "logging": {
     "level": "INFO"
@@ -468,6 +488,7 @@ Auto-generated:
 |--------|----------|-------------|--------------|----------|
 | GET | `/api/config` | Get configuration (masked) | — | `{llm: {...}, integrations: {...}}` |
 | POST | `/api/config` | Update configuration | `{llm: {...}, integrations: {...}}` | `{success: true}` |
+| POST | `/api/config/models` | List available models for a provider | `{provider, api_key?}` | `{models: [...]}` |
 | POST | `/api/config/test` | Test LLM connection | `{provider, api_key, model?}` | `{success: true/false, message}` |
 | GET | `/api/config/providers` | List available LLM providers | — | `[{id, name, default_model, requires_api_key}, ...]` |
 | GET | `/api/health` | Health check endpoint | — | `{status, llm: {...}, integrations: {...}}` |
@@ -581,7 +602,7 @@ The LLM provider system uses an abstract factory pattern to support multiple AI 
 
 ### Architecture
 
-1. **Abstract Base Class** (`backend/llm/base.py`): Defines `LLMProvider` ABC with `stream_with_tools()` method
+1. **Abstract Base Class** (`backend/llm/base.py`): Defines `LLMProvider` ABC with `stream_with_tools()` method and optional `list_models()` static method
 2. **Factory** (`backend/llm/factory.py`): `create_provider(provider, api_key, model)` instantiates the correct provider
 3. **Provider Implementations**: Each provider translates generic tool schemas to its native format and handles streaming
 
@@ -632,7 +653,7 @@ Configuration is managed by `backend/config_manager.py` which reads from `config
 ### Adding a New Provider
 
 1. Create `backend/llm/your_provider.py` extending `LLMProvider`
-2. Implement `stream_with_tools(system_prompt, messages, tools)`
+2. Implement `stream_with_tools(messages, tools, system_prompt="")`
 3. Handle tool calling in the provider's native format
 4. Yield `StreamChunk` objects with `delta` and/or `tool_calls`
 5. Register in `factory.py`'s `create_provider()`
@@ -647,17 +668,17 @@ class YourProvider(LLMProvider):
         self.api_key = api_key
         self.model = model
 
-    def stream_with_tools(self, system_prompt: str, messages: list, tools: list):
+    def stream_with_tools(self, messages: list, tools: list, system_prompt: str = ""):
         # Convert tools to provider's format
         native_tools = self._convert_tools(tools)
 
         # Make streaming API call
-        for chunk in self._stream_api_call(system_prompt, messages, native_tools):
+        for chunk in self._stream_api_call(messages, native_tools, system_prompt):
             # Parse chunk and yield StreamChunk
             if chunk.has_text:
-                yield StreamChunk(delta=chunk.text)
+                yield StreamChunk(type="text", content=chunk.text)
             if chunk.has_tool_calls:
-                yield StreamChunk(tool_calls=[
+                yield StreamChunk(type="tool_calls", tool_calls=[
                     ToolCall(id=tc.id, name=tc.name, arguments=tc.arguments)
                     for tc in chunk.tool_calls
                 ])
@@ -682,15 +703,15 @@ The agent system provides an iterative tool-calling loop that enables the AI to 
 
 Defined in `backend/agent/tools.py`:
 
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `web_search` | Search the web via Tavily API | `query` (string) |
-| `job_search` | Search job boards via JSearch/Adzuna | `query` (string), `location` (optional), `remote_only` (optional) |
-| `scrape_url` | Fetch and parse a web page | `url` (string) |
-| `create_job` | Add a job to the database | Job fields (company, title, etc.) |
-| `list_jobs` | List jobs from database | `status` (optional), `limit` (optional) |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `web_search` | Search the web via Tavily API | `query`, `num_results` (opt) |
+| `job_search` | Search job boards via JSearch/Adzuna | `query`, `location` (opt), `remote_only` (opt), `salary_min`/`salary_max` (opt), `provider` (opt) |
+| `scrape_url` | Fetch and parse a web page | `url` |
+| `create_job` | Add a job to the database | `company`, `title` (required); plus all optional job fields |
+| `list_jobs` | List and filter tracked jobs | `status` (opt), `company` (opt), `title` (opt), `url` (opt), `limit` (opt) |
 | `read_user_profile` | Read the user's profile markdown | — |
-| `update_user_profile` | Update the user's profile | `content` (string) |
+| `update_user_profile` | Update the user's profile | `content` |
 | `read_resume` | Read the user's uploaded resume text | — |
 
 ### Tool Definitions
@@ -702,7 +723,7 @@ TOOL_DEFINITIONS = [
     {
         "name": "web_search",
         "description": "Search the web for information",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Search query"}
@@ -744,7 +765,7 @@ Example:
 {
     "name": "update_job",
     "description": "Update an existing job",
-    "input_schema": {
+    "parameters": {
         "type": "object",
         "properties": {
             "job_id": {"type": "integer"},
@@ -812,8 +833,9 @@ const JOB_MUTATING_TOOLS = new Set(['create_job', 'update_job']);
 
 ### Configuration Management
 
-- **Environment variables**: All config comes from env vars (never hardcode secrets)
-- **Defaults**: Provide sensible defaults in `backend/config.py`
+- **Primary method**: `config.json` managed via the Settings UI (never hardcode secrets)
+- **Environment variable override**: Env vars take precedence over `config.json` for deployment flexibility
+- **Defaults**: Provide sensible defaults in `backend/config_manager.py`
 - **Validation**: Validate required config on app startup
 
 ## Testing
@@ -870,9 +892,9 @@ For distributing the app as a standalone desktop application:
 3. The built application will be in `src-tauri/target/release/bundle/`
 
 In the desktop build, data files are stored in platform-standard directories:
-- **Linux**: `~/.local/share/com.jobapphelper.app/`
-- **macOS**: `~/Library/Application Support/com.jobapphelper.app/`
-- **Windows**: `C:\Users\<user>\AppData\Roaming\com.jobapphelper.app\`
+- **Linux**: `~/.local/share/com.shortlist.app/`
+- **macOS**: `~/Library/Application Support/com.shortlist.app/`
+- **Windows**: `C:\Users\<user>\AppData\Roaming\com.shortlist.app\`
 
 ### Server Deployment (Web)
 
@@ -984,7 +1006,7 @@ Both workflows cache two things to speed up builds:
 
 ### Creating a Release
 
-1. Update version in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`
+1. Update version in all five files: `package.json`, `frontend/package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `pyproject.toml`
 2. Commit and tag:
    ```bash
    git tag v0.4.2
@@ -1008,7 +1030,9 @@ Code signing is **not yet configured**. This means:
 
 To enable code signing in the future:
 - **macOS:** Add Apple Developer secrets (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`, etc.) to the GitHub repo settings and uncomment the relevant env vars in `release.yml`
-- **Windows:** Add Tauri signing key secrets (`TAURI_SIGNING_PRIVATE_KEY`, etc.) to the GitHub repo settings and uncomment the relevant env vars in `release.yml`
+- **Windows:** Obtain an EV code signing certificate and configure it in the release workflow
+
+> **Note:** Tauri update signing (via `TAURI_SIGNING_PRIVATE_KEY`) is separate from OS code signing. Update signing is already configured and is used to verify auto-update integrity. OS code signing is what eliminates the SmartScreen/Gatekeeper warnings.
 
 ## Contributing
 

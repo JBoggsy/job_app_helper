@@ -1,10 +1,10 @@
-# Job Application Helper
+# Shortlist
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > A desktop application and web app to track and manage job applications with an AI-powered assistant
 
-Job Application Helper helps you organize your job search. Track applications through the hiring pipeline, store job details, and leverage an AI assistant that can search the web, scrape job postings, and automatically add jobs to your tracker—all through a simple chat interface. Available as a downloadable desktop app or as a web app you can run from source.
+Shortlist helps you organize your job search. Track applications through the hiring pipeline, store job details, and leverage an AI assistant that can search the web, scrape job postings, and automatically add jobs to your tracker—all through a simple chat interface. Available as a downloadable desktop app or as a web app you can run from source.
 
 ## Features
 
@@ -22,7 +22,7 @@ Job Application Helper helps you organize your job search. Track applications th
 
 ## Download
 
-Download the latest desktop app from [GitHub Releases](https://github.com/JBoggsy/job_app_helper/releases):
+Download the latest desktop app from [GitHub Releases](https://github.com/JBoggsy/shortlist/releases):
 
 | Platform | Download |
 |----------|----------|
@@ -37,8 +37,8 @@ Install it, launch it, and a setup wizard will guide you through choosing an AI 
 For developers or users who prefer running from source:
 
 ```bash
-git clone https://github.com/JBoggsy/job_app_helper.git
-cd job_app_helper
+git clone https://github.com/JBoggsy/shortlist.git
+cd shortlist
 ./start.sh        # Mac/Linux
 start.bat          # Windows
 ```
@@ -85,7 +85,7 @@ First-time users go through a friendly interview to build their profile.
 
 The easiest way to configure the AI assistant is through the Settings panel:
 
-1. **Open the app** in your browser (http://localhost:3000)
+1. **Open the app** — launch the desktop app, or go to http://localhost:3000 if running from source
 2. **Click the Settings icon** (gear icon) in the top-right header
 3. **Choose your LLM provider** from the dropdown (Anthropic Claude, OpenAI GPT, Google Gemini, or Ollama)
 4. **Enter your API key** (if required - Ollama runs locally and doesn't need one)
@@ -132,7 +132,7 @@ See [`docs/config.example.json`](docs/config.example.json) for the complete conf
 
 ## Getting Started
 
-1. **Download and install** — Get the app from [GitHub Releases](https://github.com/JBoggsy/job_app_helper/releases) (or [run from source](#run-from-source-alternative))
+1. **Download and install** — Get the app from [GitHub Releases](https://github.com/JBoggsy/shortlist/releases) (or [run from source](#run-from-source-alternative))
 2. **Enter your API key** — On first launch, a setup wizard opens automatically. Choose an AI provider, follow the inline instructions to get your API key, and test the connection before continuing
 3. **Complete onboarding** — The AI assistant will interview you to build your job search profile
 4. **Add jobs manually** — Click "Add Job" to create entries from the dashboard
@@ -159,7 +159,7 @@ See [`docs/config.example.json`](docs/config.example.json) for the complete conf
 
 **"LLM is not configured"**: Click the Settings gear icon, select an LLM provider, enter your API key, and click Save Settings.
 
-**Ollama connection failed**: Make sure Ollama is running separately (`ollama serve`) with a model pulled (`ollama pull llama3.1`).
+**Ollama connection failed**: Make sure Ollama is running separately (`ollama serve`) with a model pulled (`ollama pull llama3.2`).
 
 ### Run from Source Issues
 
@@ -173,7 +173,7 @@ See [`docs/config.example.json`](docs/config.example.json) for the complete conf
 
 ### Need more help?
 
-See the full [Troubleshooting guide](docs/INSTALLATION.md#troubleshooting) or report bugs at [GitHub Issues](https://github.com/JBoggsy/job_app_helper/issues).
+See the full [Troubleshooting guide](docs/INSTALLATION.md#troubleshooting) or report bugs at [GitHub Issues](https://github.com/JBoggsy/shortlist/issues).
 
 ## Tech Stack
 
@@ -187,13 +187,13 @@ See the full [Troubleshooting guide](docs/INSTALLATION.md#troubleshooting) or re
 
 The desktop app is built with [Tauri v2](https://v2.tauri.app/), which wraps the React frontend in a native webview and bundles the Flask backend as a sidecar process. No Python or Node.js installation required.
 
-Download the latest release from [GitHub Releases](https://github.com/JBoggsy/job_app_helper/releases). Data files are stored in platform-standard directories:
+Download the latest release from [GitHub Releases](https://github.com/JBoggsy/shortlist/releases). Data files are stored in platform-standard directories:
 
 | Platform | Data Location |
 |----------|---------------|
-| **Linux** | `~/.local/share/com.jobapphelper.app/` |
-| **macOS** | `~/Library/Application Support/com.jobapphelper.app/` |
-| **Windows** | `C:\Users\<user>\AppData\Roaming\com.jobapphelper.app\` |
+| **Linux** | `~/.local/share/com.shortlist.app/` |
+| **macOS** | `~/Library/Application Support/com.shortlist.app/` |
+| **Windows** | `C:\Users\<user>\AppData\Roaming\com.shortlist.app\` |
 
 For building from source or developing the desktop app, see [DEVELOPMENT.md](docs/DEVELOPMENT.md#desktop-development-tauri).
 

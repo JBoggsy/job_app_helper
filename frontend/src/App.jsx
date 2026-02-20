@@ -143,7 +143,7 @@ function App() {
       )}
       <header className="bg-white shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Job App Helper</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Shortlist</h1>
           <div className="flex gap-2">
             <button
               onClick={() => setHelpOpen(true)}

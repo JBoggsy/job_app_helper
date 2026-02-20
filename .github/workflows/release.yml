@@ -103,7 +103,7 @@ jobs:
           # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Job App Helper ${{ github.ref_name }}"
+          releaseName: "Shortlist ${{ github.ref_name }}"
           releaseBody: "See the assets below to download the installer for your platform."
           releaseDraft: true
           prerelease: false

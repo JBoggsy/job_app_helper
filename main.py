@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-parser = argparse.ArgumentParser(description="Job Application Helper backend server")
+parser = argparse.ArgumentParser(description="Shortlist backend server")
 parser.add_argument("--data-dir", help="Directory for app data files (db, config, logs, profile)")
 parser.add_argument("--port", type=int, default=5000, help="Port to run the server on")
 args = parser.parse_args()

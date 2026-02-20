@@ -1,6 +1,6 @@
-# Contributing to Job Application Helper
+# Contributing to Shortlist
 
-Thank you for your interest in contributing to Job Application Helper! This document provides guidelines and instructions for contributing to the project.
+Thank you for your interest in contributing to Shortlist! This document provides guidelines and instructions for contributing to the project.
 
 ## Table of Contents
 
@@ -35,7 +35,7 @@ Before submitting a bug report:
 2. **Use the latest version**: Make sure you're running the latest code
 3. **Reproduce the bug**: Verify the bug is consistent and reproducible
 
-When submitting a bug report, use the [Bug Report template](.github/ISSUE_TEMPLATE/bug_report.md) and include:
+When submitting a bug report, use the [Bug Report template](../.github/ISSUE_TEMPLATE/bug_report.md) and include:
 
 - **Installation method**: Whether you're using the desktop app or running from source
 - **Clear description**: What happened vs. what you expected
@@ -67,7 +67,7 @@ Before suggesting a feature:
 2. **Consider scope**: Does it fit the project's goals?
 3. **Think about users**: Would others benefit from this?
 
-When suggesting a feature, use the [Feature Request template](.github/ISSUE_TEMPLATE/feature_request.md) and include:
+When suggesting a feature, use the [Feature Request template](../.github/ISSUE_TEMPLATE/feature_request.md) and include:
 
 - **Problem**: What problem does this solve?
 - **Proposed solution**: How would you implement it?
@@ -106,19 +106,25 @@ For detailed development setup instructions, see [DEVELOPMENT.md](DEVELOPMENT.md
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/job_app_helper.git
-cd job_app_helper
+git clone https://github.com/JBoggsy/shortlist.git
+cd shortlist
 
-# Backend setup
-uv sync
-export LLM_PROVIDER=anthropic
-export LLM_API_KEY=your-api-key
-uv run python main.py
+# Start everything (installs deps, launches backend + frontend, opens browser)
+./start.sh        # Mac/Linux
+start.bat          # Windows
+```
 
-# Frontend setup (in a new terminal)
-cd frontend
-npm install
-npm run dev
+Then configure your LLM API key through the Settings panel (gear icon).
+
+**Or manually** (if you want control over each component):
+
+```bash
+uv sync                        # Install Python dependencies
+uv run python main.py          # Start Flask backend (port 5000)
+
+# In a separate terminal:
+cd frontend && npm install     # Install JS dependencies
+npm run dev                    # Start frontend (port 3000)
 ```
 
 ### Running Tests
@@ -174,7 +180,7 @@ git push origin feature/your-feature-name
 ```
 
 6. **Open a pull request**:
-   - Use the [Pull Request template](.github/PULL_REQUEST_TEMPLATE.md)
+   - Use the [Pull Request template](../.github/PULL_REQUEST_TEMPLATE.md)
    - Provide a clear description of what changed and why
    - Link related issues (e.g., "Closes #42")
    - Fill out the checklist
@@ -344,4 +350,4 @@ If you have questions about contributing, feel free to:
 - Ask in an existing issue
 - Reach out to the maintainers
 
-Thank you for contributing to Job Application Helper!
+Thank you for contributing to Shortlist!

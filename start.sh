@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Job Application Helper - Unified Startup Script
+# Shortlist - Unified Startup Script
 # This script checks dependencies, starts the backend and frontend, and opens your browser
 
 set -e  # Exit on error
@@ -13,9 +13,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}"
-echo "╔═══════════════════════════════════════╗"
-echo "║   Job Application Helper Startup     ║"
-echo "╚═══════════════════════════════════════╝"
+echo "╔═══════════════════════════════╗"
+echo "║      Shortlist Startup      ║"
+echo "╚═══════════════════════════════╝"
 echo -e "${NC}"
 
 # Function to check if a command exists
@@ -86,7 +86,7 @@ if ! command_exists uv; then
     fi
 fi
 
-echo -e "${GREEN}✓ uv$(NC)"
+echo -e "${GREEN}✓ uv${NC}"
 echo ""
 
 # Check if dependencies are installed
@@ -131,7 +131,7 @@ cleanup() {
 # Set trap for Ctrl+C
 trap cleanup SIGINT SIGTERM
 
-echo -e "${GREEN}→ Starting Job Application Helper...${NC}"
+echo -e "${GREEN}→ Starting Shortlist...${NC}"
 echo ""
 
 # Start backend

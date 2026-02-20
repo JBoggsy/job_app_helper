@@ -1,13 +1,13 @@
 @echo off
-REM Job Application Helper - Unified Startup Script for Windows
+REM Shortlist - Unified Startup Script for Windows
 REM This script checks dependencies, starts the backend and frontend, and opens your browser
 
 setlocal enabledelayedexpansion
 
 echo.
-echo ╔═══════════════════════════════════════╗
-echo ║   Job Application Helper Startup     ║
-echo ╚═══════════════════════════════════════╝
+echo ╔═══════════════════════════════╗
+echo ║      Shortlist Startup      ║
+echo ╚═══════════════════════════════╝
 echo.
 
 echo → Checking dependencies...
@@ -137,19 +137,19 @@ if not exist "config.json" (
     )
 )
 
-echo → Starting Job Application Helper...
+echo → Starting Shortlist...
 echo.
 
 REM Start backend in a new window
 echo   Starting backend server...
-start "Job App Helper - Backend" cmd /c "!UV_CMD! run python main.py"
+start "Shortlist - Backend" cmd /c "!UV_CMD! run python main.py"
 
 REM Wait for backend to start
 timeout /t 3 /nobreak >nul
 
 REM Start frontend in a new window
 echo   Starting frontend dev server...
-start "Job App Helper - Frontend" cmd /c "cd frontend && npm run dev"
+start "Shortlist - Frontend" cmd /c "cd frontend && npm run dev"
 
 REM Wait for frontend to start
 timeout /t 3 /nobreak >nul

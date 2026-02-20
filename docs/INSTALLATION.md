@@ -1,6 +1,6 @@
 # Installation Guide
 
-Welcome! This guide will help you install and run the Job Application Helper on your computer. Don't worry if you're not familiar with programming—we'll walk through everything step by step.
+Welcome! This guide will help you install and run the Shortlist on your computer. Don't worry if you're not familiar with programming—we'll walk through everything step by step.
 
 ## What You'll Need
 
@@ -22,11 +22,11 @@ Welcome! This guide will help you install and run the Job Application Helper on 
 
 ## Option A: Desktop App (Recommended)
 
-The easiest way to use Job Application Helper is to download the desktop app. No programming tools required—just download, install, and run.
+The easiest way to use Shortlist is to download the desktop app. No programming tools required—just download, install, and run.
 
 ### Step 1: Download
 
-Go to the [GitHub Releases page](https://github.com/JBoggsy/job_app_helper/releases) and download the installer for your operating system:
+Go to the [GitHub Releases page](https://github.com/JBoggsy/shortlist/releases) and download the installer for your operating system:
 
 | Platform | File to Download | Notes |
 |----------|-----------------|-------|
@@ -51,18 +51,18 @@ Go to the [GitHub Releases page](https://github.com/JBoggsy/job_app_helper/relea
 
 **Linux (.deb):**
 ```bash
-sudo dpkg -i job-app-helper_*.deb
+sudo dpkg -i shortlist_*.deb
 ```
 
 **Linux (.rpm):**
 ```bash
-sudo rpm -i job-app-helper-*.rpm
+sudo rpm -i shortlist-*.rpm
 ```
 
 **Linux (.AppImage):**
 ```bash
-chmod +x job-app-helper_*.AppImage
-./job-app-helper_*.AppImage
+chmod +x shortlist_*.AppImage
+./shortlist_*.AppImage
 ```
 
 ### Step 3: Launch
@@ -75,7 +75,7 @@ chmod +x job-app-helper_*.AppImage
 
 ## Getting Your API Keys
 
-The Job Application Helper uses AI to help you find and track jobs. To use AI, you need an API key from at least one provider.
+The Shortlist uses AI to help you find and track jobs. To use AI, you need an API key from at least one provider.
 
 ### Choose an AI Provider
 
@@ -92,7 +92,7 @@ You only need **one** of these, but you can set up multiple:
 2. Click "Sign Up" and create an account
 3. Once logged in, click "API Keys" in the left sidebar
 4. Click "Create Key"
-5. Give it a name like "Job App Helper"
+5. Give it a name like "Shortlist"
 6. Copy the key that appears (it starts with "sk-ant-")
 7. **Important:** Save this key somewhere safe—you won't be able to see it again!
 
@@ -123,7 +123,7 @@ You only need **one** of these, but you can set up multiple:
 
 If you have a powerful computer (16GB+ RAM recommended), you can run AI models locally:
 
-1. Go to [ollama.ai](https://ollama.ai/)
+1. Go to [ollama.com](https://ollama.com/)
 2. Download and install Ollama for your operating system
 3. Open a terminal and download a model:
    ```bash
@@ -268,7 +268,7 @@ If you prefer to run the application from source code (for development or custom
 
 ### Prerequisites
 
-You need to install three programs before you can run the Job Application Helper.
+You need to install three programs before you can run the Shortlist.
 
 #### Install Python (3.12 or newer)
 
@@ -276,7 +276,7 @@ Python is the programming language that powers the backend of this application.
 
 **Windows:**
 1. Go to [python.org/downloads](https://www.python.org/downloads/)
-2. Download the **standalone installer** which is linked beneath the big yellow button. Avoid the big yellow button itself.
+2. Scroll down past the big yellow button and find the **"Windows installer (64-bit)"** link under the latest stable release — this is the standalone installer. (The big yellow button sometimes downloads the wrong version or redirects to the Microsoft Store.)
 3. Run the downloaded installer
 4. **Important:** Check the box that says "Add Python to PATH" before clicking Install
 5. Click "Install Now"
@@ -306,9 +306,9 @@ Node.js and npm are needed to run the web interface.
 
 1. Go to [nodejs.org](https://nodejs.org/)
 2. Click the big green "Get Node.js" button
-3. Click the green "Windows Installer" or "macOS Installer" depending on your OS
-3. Run the installer and follow the default options
-4. Verify installation by opening a terminal/command prompt and typing:
+3. Click the "Windows Installer" or "macOS Installer" depending on your OS
+4. Run the installer and follow the default options
+5. Verify installation by opening a terminal/command prompt and typing:
 ```bash
 node --version
 npm --version
@@ -352,22 +352,22 @@ Git helps you download and update the code easily.
    ```
 3. Download the code:
    ```bash
-   git clone https://github.com/JBoggsy/job_app_helper.git
+   git clone https://github.com/JBoggsy/shortlist.git
    ```
 4. Go into the new folder:
    ```bash
-   cd job_app_helper
+   cd shortlist
    ```
 
 #### Download as ZIP (Alternative)
 
-1. Go to the [GitHub repository](https://github.com/JBoggsy/job_app_helper) in your web browser
+1. Go to the [GitHub repository](https://github.com/JBoggsy/shortlist) in your web browser
 2. Click the green "Code" button
 3. Click "Download ZIP"
 4. Extract the ZIP file to a location you'll remember (like Documents)
 5. Open a terminal/command prompt and navigate to the extracted folder:
    ```bash
-   cd Documents/job_app_helper-main
+   cd Documents/shortlist-main
    ```
 
 ### Running the Application
@@ -376,9 +376,9 @@ We've made this easy! There's a single command that starts everything automatica
 
 **Windows:**
 1. Open a command prompt or PowerShell
-2. Navigate to the job_app_helper folder:
+2. Navigate to the shortlist folder:
    ```bash
-   cd path\to\job_app_helper
+   cd path\to\shortlist
    ```
 3. Run the start script:
    ```bash
@@ -387,9 +387,9 @@ We've made this easy! There's a single command that starts everything automatica
 
 **Mac/Linux:**
 1. Open a terminal
-2. Navigate to the job_app_helper folder:
+2. Navigate to the shortlist folder:
    ```bash
-   cd path/to/job_app_helper
+   cd path/to/shortlist
    ```
 3. Run the start script:
    ```bash
@@ -411,13 +411,13 @@ If you prefer to start the backend and frontend separately:
 
 1. **Backend:** In one terminal, run:
    ```bash
-   cd path/to/job_app_helper
+   cd path/to/shortlist
    uv run python main.py
    ```
 
 2. **Frontend:** In another terminal, run:
    ```bash
-   cd path/to/job_app_helper/frontend
+   cd path/to/shortlist/frontend
    npm run dev
    ```
 
@@ -429,13 +429,13 @@ Just run the start script again — it handles everything automatically:
 
 **Windows:**
 ```bash
-cd path\to\job_app_helper
+cd path\to\shortlist
 start.bat
 ```
 
 **Mac/Linux:**
 ```bash
-cd path/to/job_app_helper
+cd path/to/shortlist
 ./start.sh
 ```
 
@@ -468,8 +468,8 @@ After starting, continue to [First-Time Setup](#first-time-setup) to configure t
 
 **Solution:** Make it executable first:
 ```bash
-chmod +x job-app-helper_*.AppImage
-./job-app-helper_*.AppImage
+chmod +x shortlist_*.AppImage
+./shortlist_*.AppImage
 ```
 
 #### Desktop app shows blank screen
@@ -586,7 +586,7 @@ chmod +x job-app-helper_*.AppImage
 **Solution:**
 1. Make sure Ollama is installed: [ollama.com](https://ollama.com/)
 2. Start the Ollama server: `ollama serve`
-3. Pull a model: `ollama pull llama3.1`
+3. Pull a model: `ollama pull llama3.2`
 4. In Settings, select "Ollama (Local)" as your provider
 
 > **Note:** Even with the desktop app, Ollama must be running as a separate process.
@@ -597,14 +597,18 @@ chmod +x job-app-helper_*.AppImage
 
 ### Desktop App
 
-1. Go to the [GitHub Releases page](https://github.com/JBoggsy/job_app_helper/releases)
+The desktop app **checks for updates automatically** on startup. When a new version is available, you'll see a banner at the top of the app with the new version number. Click "Update Now" to download and install, then "Restart Now" to apply the update.
+
+If you prefer to update manually:
+
+1. Go to the [GitHub Releases page](https://github.com/JBoggsy/shortlist/releases)
 2. Download the latest installer for your platform
 3. Install it over the existing version — your data (jobs, profile, settings) is preserved because it's stored in a separate data directory
 
 ### Running from Source
 
 ```bash
-cd path/to/job_app_helper
+cd path/to/shortlist
 
 # Pull latest code
 git pull
@@ -626,7 +630,7 @@ If you run into issues not covered here:
 
 1. Check the built-in help panel (click the "?" button in the app header)
 2. Check the `logs/app.log` file for error messages (in the app folder for source installs, or in your system's app data directory for desktop installs)
-3. Open an issue on the [GitHub repository](https://github.com/JBoggsy/job_app_helper/issues) with:
+3. Open an issue on the [GitHub repository](https://github.com/JBoggsy/shortlist/issues) with:
    - Whether you're using the desktop app or running from source
    - What you were trying to do
    - What error message you saw

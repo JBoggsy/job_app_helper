@@ -1,5 +1,5 @@
 """
-Configuration file management for Job Application Helper.
+Configuration file management for Shortlist.
 
 Provides functions to read and write configuration to config.json,
 with fallback to environment variables.

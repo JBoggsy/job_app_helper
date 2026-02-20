@@ -228,7 +228,7 @@ This fix resolves the common issue where `python --version` fails on Windows eve
 
 ## [0.1.0] - 2026-02-17
 
-Initial release of Job Application Helper - a full-stack web application for tracking job applications with an AI-powered assistant.
+Initial release of Shortlist - a full-stack web application for tracking job applications with an AI-powered assistant.
 
 ### Added
 

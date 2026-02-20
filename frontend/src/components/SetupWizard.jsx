@@ -225,7 +225,7 @@ function StepWelcome() {
           />
         </svg>
       </div>
-      <h2 className="text-2xl font-bold text-gray-900">Welcome to Job App Helper</h2>
+      <h2 className="text-2xl font-bold text-gray-900">Welcome to Shortlist</h2>
       <p className="text-gray-600 max-w-sm">
         Track your job applications and get AI-powered help with research, job searching, and more.
         Let's get you set up in a minute.

@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri/dev/crates/tauri-config-schema/schema.json",
-  "productName": "Job App Helper",
+  "productName": "Shortlist",
   "version": "0.7.1",
-  "identifier": "com.jobapphelper.app",
+  "identifier": "com.shortlist.app",
   "build": {
     "beforeDevCommand": "cd frontend && npm run dev",
     "devUrl": "http://localhost:3000",
@@ -15,7 +15,7 @@
     },
     "windows": [
       {
-        "title": "Job App Helper",
+        "title": "Shortlist",
         "width": 1200,
         "height": 800,
         "minWidth": 900,
@@ -26,7 +26,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/JBoggsy/job_app_helper/releases/latest/download/latest.json"
+        "https://github.com/JBoggsy/shortlist/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhBMDU1NEQ4QjA5RjAxOTUKUldTVkFaK3cyRlFGaXVGS2VOUnp3cnVRUy9DY2t4VG5HVm9SOHhUZFdqSTI0YjBBUHZQbjFMa3UK"
     }

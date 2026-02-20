@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Job application helper — a desktop application and web app to track and manage job applications. Users can add, edit, and delete job applications and track their status through the hiring pipeline. Includes an LLM-powered AI assistant that can research job postings, scrape URLs, search the web, and automatically add jobs to the database via a chat interface.
+Shortlist — a desktop application and web app to track and manage job applications. Users can add, edit, and delete job applications and track their status through the hiring pipeline. Includes an LLM-powered AI assistant that can research job postings, scrape URLs, search the web, and automatically add jobs to the database via a chat interface.
 
 Available as a downloadable desktop app (via Tauri — the primary distribution method for regular users) or as a web app run from source (for developers). User-facing documentation (README, INSTALLATION.md) prioritizes the desktop download path, with "run from source" as an advanced alternative.
 
@@ -310,7 +310,7 @@ The desktop app uses `tauri-plugin-updater` to check for updates on startup. Whe
 
 **Signing key setup (required for auto-updates to work):**
 ```bash
-npx @tauri-apps/cli signer generate -w ~/.tauri/job-app-helper.key
+npx @tauri-apps/cli signer generate -w ~/.tauri/shortlist.key
 ```
 This generates a keypair. Then:
 1. Copy the **public key** (printed to stdout) into `src-tauri/tauri.conf.json` → `plugins.updater.pubkey` (replacing `PLACEHOLDER_PUBLIC_KEY`)

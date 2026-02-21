@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-02-21
+
 ### Added
 - **Resizable panels** — All slide-out panels (AI Assistant, Profile, Settings, Help) can now be resized by dragging their left edge; widths persist across sessions via localStorage
 

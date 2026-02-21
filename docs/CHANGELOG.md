@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **LangChain dependencies** — Added `langchain-core`, `langchain`, `langchain-anthropic`, `langchain-openai`, `langchain-google-genai`, `langchain-ollama` to prepare for LLM provider migration
+- **LangChain model factory** — New `backend/llm/langchain_factory.py` with `create_langchain_model()` that returns a `BaseChatModel` instance for any supported provider
+
 ## [0.7.3] - 2026-02-21
 
 ### Added

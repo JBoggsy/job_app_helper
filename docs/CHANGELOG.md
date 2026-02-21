@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **LangChain dependencies** — Added `langchain-core`, `langchain`, `langchain-anthropic`, `langchain-openai`, `langchain-google-genai`, `langchain-ollama` to prepare for LLM provider migration
 - **LangChain model factory** — New `backend/llm/langchain_factory.py` with `create_langchain_model()` that returns a `BaseChatModel` instance for any supported provider
+- **LangChain tool wrappers** — New `backend/agent/langchain_tools.py` with Pydantic input models and `create_langchain_tools()` factory that wraps all 8 `AgentTools` methods as LangChain `StructuredTool` instances
 
 ## [0.7.3] - 2026-02-21
 

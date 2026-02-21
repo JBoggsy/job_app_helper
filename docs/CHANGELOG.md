@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Direct download links in releases** — Release workflow now generates clickable download links for each platform's installer in the GitHub Release description
+- **Direct download links in README** — Download table now links directly to the latest release artifacts instead of just linking to the Releases page
+- **Integration keys in setup wizard** — First-time setup wizard now includes a step for Tavily search and JSearch API keys with inline how-to guides and direct sign-up links
+
 ## [0.8.0] - 2026-02-21
 
 Complete migration from custom LLM provider layer to LangChain — all 4 providers (Anthropic, OpenAI, Gemini, Ollama) now use a unified `BaseChatModel` interface. No user-facing API or frontend changes; SSE events, tool behavior, and all endpoints remain identical.

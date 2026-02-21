@@ -15,6 +15,21 @@
 
 ## Features
 
+- [x] **Direct download links in README and releases** — README download table links directly to latest installers; release workflow auto-generates clickable download links per platform
+- [x] **Improve initial setup wizard with all API keys** — Setup wizard now includes a dedicated step for Tavily and JSearch API keys with inline how-to guides and direct sign-up links
+
+- [ ] **Dedicated visual interface for job search results**
+  - When the agent finds jobs, they should be presented in a standardized, visually distinct format — not just a text chat bubble
+  - Currently different models format found jobs differently; results should have a consistent, appealing layout
+  - Design a dedicated job results component separate from the agent's speech bubble (design TBD)
+
+- [ ] **Job search sub-agent for better result coverage**
+  - Currently web/job search results go directly into the agent's context during its ReAct loop, limiting output to ~4-7 suggestions regardless of market size
+  - Create a sub-agent that receives all raw search results and evaluates each individually (or in small batches)
+  - Sub-agent builds a comprehensive results list that is handed back to the main agent
+  - Goal: "find AI jobs in SF" should return significantly more results than "find AI jobs in Charlotte, NC"
+  - Exact sub-agent process TBD
+
 - [ ] **Improve agent orchestration**
   - Provide more guidance to the agent using an architected workflow rather than relying on the
     agent to just work

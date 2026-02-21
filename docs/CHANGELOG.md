@@ -7,23 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-02-21
+
+Complete migration from custom LLM provider layer to LangChain — all 4 providers (Anthropic, OpenAI, Gemini, Ollama) now use a unified `BaseChatModel` interface. No user-facing API or frontend changes; SSE events, tool behavior, and all endpoints remain identical.
+
 ### Added
-- **LangChain dependencies** — Added `langchain-core`, `langchain`, `langchain-anthropic`, `langchain-openai`, `langchain-google-genai`, `langchain-ollama` to prepare for LLM provider migration
+- **LangChain integration** — Added `langchain-core`, `langchain`, `langchain-anthropic`, `langchain-openai`, `langchain-google-genai`, `langchain-ollama` dependencies
 - **LangChain model factory** — New `backend/llm/langchain_factory.py` with `create_langchain_model()` that returns a `BaseChatModel` instance for any supported provider
-- **LangChain tool wrappers** — Pydantic input models and `@agent_tool` decorator in `backend/agent/tools.py` with `to_langchain_tools()` method for auto-generating LangChain `StructuredTool` instances (each tool defined in one place)
-- **LangChain agent classes** — New `backend/agent/langchain_agent.py` with `LangChainAgent`, `LangChainOnboardingAgent`, and `LangChainResumeParser` that use LangChain `BaseChatModel.stream()` / `.invoke()` while yielding identical SSE event dicts as the old agents
+- **`@agent_tool` decorator** — New decorator for tool methods in `backend/agent/tools.py` with Pydantic input schemas colocated alongside business logic; `to_langchain_tools()` auto-generates LangChain `StructuredTool` instances — adding a new tool now requires a single decorated method instead of edits across 3 files
+- **LangChain agent classes** — New `backend/agent/langchain_agent.py` with `LangChainAgent`, `LangChainOnboardingAgent`, and `LangChainResumeParser` using `BaseChatModel.stream()` / `.invoke()` with streaming tool-call chunk accumulation
+- **Model listing module** — New `backend/llm/model_listing.py` with standalone `list_models()` functions for each provider using raw SDKs
+- **Migration guide** — New `docs/LANGCHAIN_MIGRATION.md` documenting the full 6-phase migration plan and architecture decisions
 
 ### Changed
 - **Routes wired to LangChain** — `backend/routes/chat.py`, `backend/routes/config.py`, and `backend/routes/resume.py` now use LangChain models and agents instead of the old custom provider/agent code; SSE events and API contracts unchanged
-- **Model listing extracted** — New `backend/llm/model_listing.py` with standalone `list_models()` functions for each provider (uses raw SDKs)
 - **Config class slimmed** — `backend/config.py` now only includes Flask-consumed settings (`SQLALCHEMY_*`, `SECRET_KEY`, `LOG_LEVEL`); dead LLM/integration attributes removed
+- **Tool definitions consolidated** — Tool methods in `AgentTools` are now public (no underscore prefix); `execute()` auto-dispatches via `getattr()` and decorator detection
+- **Developer docs updated** — `docs/DEVELOPMENT.md` rewritten with LangChain architecture: project structure, LLM provider system, agent system, and "Adding a New Provider/Tool" guides
 
 ### Removed
 - **Old custom LLM providers** — Deleted `backend/llm/base.py` (`LLMProvider` ABC, `StreamChunk`, `ToolCall`), `anthropic_provider.py`, `openai_provider.py`, `gemini_provider.py`, `ollama_provider.py`
-- **Old agent classes** — Deleted `backend/agent/agent.py` (`Agent`, `OnboardingAgent`, `ResumeParsingAgent`) — replaced by LangChain equivalents in `langchain_agent.py`
-- **Dead re-export layer** — Deleted `backend/llm/factory.py` (nothing imported from it)
-- **Dead tool definitions** — Removed `TOOL_DEFINITIONS` dict and separate `langchain_tools.py` wrapper file — consolidated into `@agent_tool` decorator on `AgentTools` methods
-- **Unused imports** — Cleaned up unused imports across `langchain_agent.py`, `routes/config.py`, `tools.py`, `resume_parser.py`
+- **Old agent classes** — Deleted `backend/agent/agent.py` (`Agent`, `OnboardingAgent`, `ResumeParsingAgent`) — replaced by LangChain equivalents
+- **Dead modules** — Deleted `backend/llm/factory.py` (dead re-export layer) and `backend/agent/langchain_tools.py` (intermediate wrapper consolidated into `@agent_tool`)
+- **`TOOL_DEFINITIONS` dict** — Removed ~170-line manual tool definition dictionary, replaced by `@agent_tool` decorator metadata
+- **Unused imports** — Cleaned up stale imports across `langchain_agent.py`, `routes/config.py`, `tools.py`, `resume_parser.py`
 
 ## [0.7.3] - 2026-02-21
 

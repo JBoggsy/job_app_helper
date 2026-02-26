@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
 
 from backend.database import db
+from backend.job_enrichment import enrich_job_data
 from backend.models.job import Job
 from backend.models.search_result import SearchResult
 from backend.agent.user_profile import read_profile, write_profile
@@ -205,7 +206,7 @@ class AgentTools:
     def __init__(self, search_api_key="", adzuna_app_id="", adzuna_app_key="",
                  adzuna_country="us", jsearch_api_key="",
                  conversation_id=None, event_callback=None,
-                 search_model=None):
+                 search_model=None, enrichment_model=None):
         self.search_api_key = search_api_key
         self.adzuna_app_id = adzuna_app_id
         self.adzuna_app_key = adzuna_app_key
@@ -215,6 +216,8 @@ class AgentTools:
         self.conversation_id = conversation_id
         self.event_callback = event_callback
         self.search_model = search_model
+        # For job enrichment (scrape + LLM extraction when adding jobs)
+        self.enrichment_model = enrichment_model
 
     # -- Tool dispatch (used by agent loop for tool-call execution) -----
 
@@ -556,34 +559,65 @@ class AgentTools:
     @agent_tool(
         description=(
             "Add a new job application to the tracker. "
-            "Use this after researching a job posting to save it."
+            "Use this after researching a job posting to save it. "
+            "If a URL is provided but some fields are missing, the system "
+            "will automatically scrape the job posting to fill in details "
+            "like salary, location, requirements, and tags."
         ),
         args_schema=CreateJobInput,
     )
     def create_job(self, **kwargs):
         logger.info("create_job: company=%r title=%r", kwargs.get("company"), kwargs.get("title"))
+
+        # Attempt to enrich missing fields by scraping the job URL
+        enriched = self._enrich_create_job_data(kwargs)
+
         job = Job(
-            company=kwargs["company"],
-            title=kwargs["title"],
-            url=kwargs.get("url"),
-            status=kwargs.get("status", "saved"),
-            notes=kwargs.get("notes"),
-            salary_min=kwargs.get("salary_min"),
-            salary_max=kwargs.get("salary_max"),
-            location=kwargs.get("location"),
-            remote_type=kwargs.get("remote_type"),
-            tags=kwargs.get("tags"),
-            contact_name=kwargs.get("contact_name"),
-            contact_email=kwargs.get("contact_email"),
-            source=kwargs.get("source"),
-            job_fit=kwargs.get("job_fit"),
-            requirements=kwargs.get("requirements"),
-            nice_to_haves=kwargs.get("nice_to_haves"),
+            company=enriched["company"],
+            title=enriched["title"],
+            url=enriched.get("url"),
+            status=enriched.get("status", "saved"),
+            notes=enriched.get("notes"),
+            salary_min=enriched.get("salary_min"),
+            salary_max=enriched.get("salary_max"),
+            location=enriched.get("location"),
+            remote_type=enriched.get("remote_type"),
+            tags=enriched.get("tags"),
+            contact_name=enriched.get("contact_name"),
+            contact_email=enriched.get("contact_email"),
+            source=enriched.get("source"),
+            job_fit=enriched.get("job_fit"),
+            requirements=enriched.get("requirements"),
+            nice_to_haves=enriched.get("nice_to_haves"),
         )
         db.session.add(job)
         db.session.commit()
-        logger.info("create_job: created job id=%d", job.id)
-        return job.to_dict()
+
+        enrichment_status = enriched.get("_enrichment_status", "skipped")
+        fields_enriched = enriched.get("_fields_enriched", [])
+        logger.info("create_job: created job id=%d enrichment=%s fields=%s",
+                    job.id, enrichment_status, fields_enriched)
+
+        result = job.to_dict()
+        if fields_enriched:
+            result["_fields_enriched"] = fields_enriched
+            result["_enrichment_status"] = enrichment_status
+        return result
+
+    def _enrich_create_job_data(self, kwargs):
+        """Attempt to enrich job data via URL scraping + LLM extraction.
+
+        Falls back to the original kwargs on any error.
+        """
+        try:
+            return enrich_job_data(
+                job_data=kwargs,
+                search_api_key=self.search_api_key,
+                llm_model=self.enrichment_model,
+            )
+        except Exception as e:
+            logger.warning("create_job enrichment failed, using original data: %s", e)
+            return kwargs
 
     @agent_tool(
         description=(

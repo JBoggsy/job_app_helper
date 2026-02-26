@@ -20,16 +20,22 @@ function StarRating({ rating }) {
 function ResultCard({ result, onAddToTracker }) {
   const [expanded, setExpanded] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [addPhase, setAddPhase] = useState(""); // "", "enriching", "done"
 
   const handleAdd = async (e) => {
     e.stopPropagation();
     setAdding(true);
+    setAddPhase("enriching");
     try {
       await onAddToTracker(result.id);
+      setAddPhase("done");
     } catch {
       setAdding(false);
+      setAddPhase("");
     }
   };
+
+  const addButtonLabel = addPhase === "enriching" ? "Enriching & Adding..." : "Add to Tracker";
 
   const salary =
     result.salary_min || result.salary_max
@@ -114,9 +120,15 @@ function ResultCard({ result, onAddToTracker }) {
               <button
                 onClick={handleAdd}
                 disabled={adding}
-                className="text-xs px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                className="text-xs px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
               >
-                {adding ? "Adding..." : "Add to Tracker"}
+                {adding && (
+                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                )}
+                {addButtonLabel}
               </button>
             )}
           </div>

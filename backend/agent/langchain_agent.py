@@ -423,6 +423,7 @@ class LangChainAgent:
             conversation_id=conversation_id,
             event_callback=_event_callback,
             search_model=search_model,
+            enrichment_model=search_model,  # use cheaper model for enrichment
         )
         self.lc_tools = self.agent_tools.to_langchain_tools()
         self.model_with_tools = model.bind_tools(self.lc_tools)

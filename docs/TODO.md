@@ -14,12 +14,13 @@
 - [x] Resume uploading and parsing — PDF/DOCX upload with AI agent access (v0.7.0)
 - [x] AI resume parsing agent — structured JSON extraction from resumes (v0.7.1)
 - [x] Auto-update system — Tauri updater with download progress banner (v0.5.0)
+- [x] Dedicated visual interface for job search results (v0.9.0)
+- [x] Job search sub-agent for better result coverage (v0.9.0)
+- [x] Main agent delegates job searches to specialized sub-agent via `run_job_search` tool (v0.9.0)
 
 ## Features
 
-- [x] **Dedicated visual interface for job search results** — SearchResultsPanel slides out next to chat with collapsible result cards, star ratings, and "Add to Tracker" buttons
-- [x] **Job search sub-agent for better result coverage** — LangChainJobSearchAgent runs multiple varied searches, evaluates each job against user profile, adds qualifying results (≥3 stars) to persistent per-conversation results panel
-- [x] **Improve agent orchestration** — Main agent delegates job searches to specialized sub-agent via `run_job_search` tool; sub-agent handles searching, scraping, and evaluation autonomously
+- [x] **Better job adding** — Jobs added to tracker are auto-enriched by scraping the posting URL and extracting missing fields via LLM
 
 - [ ] **Job application preparation**
   - Add per-job preparation components (interview prep, resume tailoring, cover letter drafts)

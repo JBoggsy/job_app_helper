@@ -66,6 +66,7 @@ The start scripts handle everything automatically. Use the manual commands below
 - `backend/routes/profile.py` — Profile blueprint (`profile_bp` at `/api/profile`)
 - `backend/routes/resume.py` — Resume upload blueprint (`resume_bp` at `/api/resume`) — upload, fetch, delete resume files; LLM-powered resume parsing endpoint
 - `backend/resume_parser.py` — Resume parsing utilities (PDF via PyMuPDF, DOCX via python-docx); file save/load/delete helpers; parsed resume JSON storage (`save_parsed_resume`, `get_parsed_resume`, `delete_parsed_resume`)
+- `backend/job_enrichment.py` — Job enrichment utilities; scrapes job posting URLs and uses LLM to extract missing fields (salary, location, remote type, requirements, tags); used by `add_search_result_to_tracker` route and `create_job` agent tool
 - `backend/models/chat.py` — `Conversation` and `Message` models for chat persistence
 - `backend/llm/langchain_factory.py` — `create_langchain_model()` factory that returns a LangChain `BaseChatModel` for any supported provider
 - `backend/llm/model_listing.py` — `list_models()` functions for each provider (uses raw SDKs to query available models); `MODEL_LISTERS` registry

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Automatic job enrichment** — When adding a job to the tracker (via search results panel or agent `create_job` tool), the system automatically scrapes the job posting URL and uses an LLM to extract missing fields (salary, location, remote type, requirements, nice-to-haves, tags). Uses the cheaper search LLM config. Gracefully falls back to original data if scraping or LLM fails.
+- **Job enrichment module** — New `backend/job_enrichment.py` with `enrich_job_data()` function for URL scraping + LLM-based field extraction
+- **Enrichment loading state** — "Add to Tracker" button now shows spinner and "Enriching & Adding..." text during the enrichment process
+
 ## [0.9.0] - 2026-02-26
 
 ### Added

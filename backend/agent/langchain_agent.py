@@ -10,7 +10,9 @@ give full control over SSE events.
 
 import json
 import logging
+import queue
 import re
+import threading
 import uuid
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -406,11 +408,11 @@ class LangChainAgent:
         conversation_id: int | None = None,
         search_model: BaseChatModel | None = None,
     ):
-        # Pending SSE events from sub-agents, yielded after tool execution
-        self._pending_events: list[dict] = []
+        # Thread-safe queue for real-time SSE events from sub-agents
+        self._event_queue: queue.Queue[dict] = queue.Queue()
 
         def _event_callback(event):
-            self._pending_events.append(event)
+            self._event_queue.put(event)
 
         self.agent_tools = AgentTools(
             search_api_key=search_api_key,
@@ -527,15 +529,49 @@ class LangChainAgent:
                     "data": {"id": tc.id, "name": tc.name, "arguments": tc.args},
                 }
 
-                # Clear pending events before execution
-                self._pending_events.clear()
+                # Drain any stale events
+                while not self._event_queue.empty():
+                    try:
+                        self._event_queue.get_nowait()
+                    except queue.Empty:
+                        break
 
-                result = self.agent_tools.execute(tc.name, tc.args)
+                # Run tool in a thread so sub-agent events stream in real-time
+                result_holder: list = []
+                error_holder: list = []
 
-                # Flush any SSE events queued by sub-agents (e.g., search_result_added)
-                for pending in self._pending_events:
+                # Capture Flask app context for the thread
+                from flask import current_app
+                app = current_app._get_current_object()
+
+                def _run_tool():
+                    with app.app_context():
+                        try:
+                            result_holder.append(self.agent_tools.execute(tc.name, tc.args))
+                        except Exception as exc:
+                            error_holder.append(exc)
+                        finally:
+                            # Sentinel to signal completion
+                            self._event_queue.put(None)
+
+                thread = threading.Thread(target=_run_tool, daemon=True)
+                thread.start()
+
+                # Yield sub-agent events in real-time while tool runs
+                while True:
+                    try:
+                        pending = self._event_queue.get(timeout=0.1)
+                    except queue.Empty:
+                        continue
+                    if pending is None:
+                        break
                     yield pending
-                self._pending_events.clear()
+
+                thread.join()
+
+                if error_holder:
+                    raise error_holder[0]
+                result = result_holder[0]
 
                 if isinstance(result, dict) and "error" in result:
                     logger.warning("Tool error: %s — %s", tc.name, result["error"])

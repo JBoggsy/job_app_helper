@@ -333,11 +333,6 @@ class LangChainJobSearchAgent:
                     if text:
                         text_accum += text
                         full_text += text
-                        # Emit progress updates from sub-agent text
-                        self.event_callback({
-                            "event": "search_progress",
-                            "data": {"content": text},
-                        })
 
                     tc_chunks = getattr(chunk, "tool_call_chunks", None) or []
                     for tc_chunk in tc_chunks:
@@ -363,14 +358,24 @@ class LangChainJobSearchAgent:
             )
             lc_messages.append(ai_message)
 
-            # Execute tools (no SSE events for internal tool calls except add_search_result)
+            # Execute tools — emit progress events for user-facing visibility
+            _progress_labels = {
+                "web_search": "Searching the web...",
+                "job_search": "Searching job boards...",
+                "scrape_url": "Scraping job posting...",
+                "add_search_result": "Evaluating candidate...",
+            }
             for tc in final_tool_calls:
                 logger.info("JobSearch tool call: %s", tc.name)
 
-                if tc.name == "add_search_result":
-                    result = self.agent_tools.execute(tc.name, tc.args)
-                else:
-                    result = self.agent_tools.execute(tc.name, tc.args)
+                label = _progress_labels.get(tc.name)
+                if label:
+                    self.event_callback({
+                        "event": "search_progress",
+                        "data": {"content": label},
+                    })
+
+                result = self.agent_tools.execute(tc.name, tc.args)
 
                 lc_messages.append(
                     ToolMessage(

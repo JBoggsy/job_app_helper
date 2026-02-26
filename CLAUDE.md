@@ -69,8 +69,10 @@ The start scripts handle everything automatically. Use the manual commands below
 - `backend/models/chat.py` — `Conversation` and `Message` models for chat persistence
 - `backend/llm/langchain_factory.py` — `create_langchain_model()` factory that returns a LangChain `BaseChatModel` for any supported provider
 - `backend/llm/model_listing.py` — `list_models()` functions for each provider (uses raw SDKs to query available models); `MODEL_LISTERS` registry
-- `backend/agent/tools.py` — `AgentTools` class with `@agent_tool`-decorated methods (web_search, job_search, scrape_url, create_job, list_jobs, read_user_profile, update_user_profile, read_resume), Pydantic input schemas, and `to_langchain_tools()` for auto-generating LangChain `StructuredTool` instances
-- `backend/agent/langchain_agent.py` — `LangChainAgent` (streaming tool-calling loop), `LangChainOnboardingAgent` (profile interview), `LangChainResumeParser` (non-streaming JSON extraction); system prompts; helper utilities for tool-call chunk accumulation, message conversion, and JSON extraction
+- `backend/models/search_result.py` — `SearchResult` model for per-conversation job search results (fields: company, title, url, salary, location, remote_type, source, description, requirements, nice_to_haves, job_fit, fit_reason, added_to_tracker, tracker_job_id)
+- `backend/agent/tools.py` — `AgentTools` class with `@agent_tool`-decorated methods (web_search, job_search, scrape_url, create_job, list_jobs, read_user_profile, update_user_profile, read_resume, run_job_search, list_search_results), Pydantic input schemas, and `to_langchain_tools()` for auto-generating LangChain `StructuredTool` instances
+- `backend/agent/langchain_agent.py` — `LangChainAgent` (streaming tool-calling loop with sub-agent event forwarding), `LangChainOnboardingAgent` (profile interview), `LangChainResumeParser` (non-streaming JSON extraction); system prompts; helper utilities for tool-call chunk accumulation, message conversion, and JSON extraction
+- `backend/agent/job_search_agent.py` — `LangChainJobSearchAgent` (job search sub-agent); `JobSearchSubAgentTools` with `add_search_result` tool; searches multiple job boards, evaluates fit against user profile, adds qualifying results (≥3 stars) to per-conversation results panel via SSE events
 - `backend/agent/user_profile.py` — User profile markdown file management with YAML frontmatter (onboarded flag with tri-state: `false`/`in_progress`/`true`), read/write/onboarding helpers
 
 ### Frontend
@@ -81,7 +83,8 @@ The start scripts handle everything automatically. Use the manual commands below
 - `frontend/src/api.js` — API helper with `getApiBase()` for Tauri URL resolution (`fetchJobs`, `createJob`, `updateJob`, `deleteJob`, chat functions, `streamMessage`, `fetchProfile`, `updateProfile`, config functions, onboarding functions, resume functions)
 - `frontend/src/pages/JobList.jsx` — Main dashboard: job table with status badges, edit/delete; add form triggered via `showForm`/`onFormClose` props from App
 - `frontend/src/components/JobForm.jsx` — Reusable form for creating and editing jobs
-- `frontend/src/components/ChatPanel.jsx` — Slide-out AI assistant chat panel with SSE streaming
+- `frontend/src/components/ChatPanel.jsx` — Slide-out AI assistant chat panel with SSE streaming; manages search results state and renders SearchResultsPanel alongside chat when results exist
+- `frontend/src/components/SearchResultsPanel.jsx` — Slide-out panel displaying job search results with collapsible cards, star ratings, fit reasons, "Add to Tracker" buttons; appears to the right of ChatPanel during/after job searches
 - `frontend/src/components/ProfilePanel.jsx` — Slide-out user profile viewer/editor panel with resume upload section (PDF/DOCX)
 - `frontend/src/components/SettingsPanel.jsx` — Slide-out settings panel for configuring LLM provider, API keys, and onboarding agent; includes `ApiKeyGuide` sub-component that renders expandable step-by-step instructions + direct links for each key field (Anthropic, OpenAI, Gemini, Tavily, JSearch, Adzuna); Ollama renders nothing (no key needed)
 - `frontend/src/components/SetupWizard.jsx` — First-time setup wizard (centered modal, 5 steps: welcome → provider selection → API key entry with inline how-to guide + test connection → integration keys (Tavily + JSearch) with inline how-to guides → done); auto-opens for new users instead of Settings panel; calls `onComplete()` to launch onboarding chat or `onClose()` to dismiss; `pendingOnboarding` stays true on dismiss so the Settings manual-save path still triggers onboarding
@@ -117,6 +120,8 @@ The start scripts handle everything automatically. Use the manual commands below
 | GET | `/api/chat/conversations/:id` | Get conversation with messages |
 | DELETE | `/api/chat/conversations/:id` | Delete conversation |
 | POST | `/api/chat/conversations/:id/messages` | Send message, returns SSE stream |
+| GET | `/api/chat/conversations/:id/search-results` | Get job search results for a conversation |
+| POST | `/api/chat/conversations/:id/search-results/:resultId/add-to-tracker` | Promote a search result to the job tracker |
 | GET | `/api/profile` | Get user profile markdown content |
 | PUT | `/api/profile` | Update user profile markdown content |
 | GET | `/api/profile/onboarding-status` | Check if user has been onboarded |
@@ -164,6 +169,11 @@ Configuration structure in `config.json`:
     "api_key": "",
     "model": ""
   },
+  "search_llm": {
+    "provider": "",
+    "api_key": "",
+    "model": ""
+  },
   "integrations": {
     "search_api_key": "tvly-...",
     "jsearch_api_key": "",
@@ -186,6 +196,9 @@ Environment variables are checked first, then `config.json`. Useful for developm
 - `ONBOARDING_LLM_PROVIDER` — optional, defaults to `LLM_PROVIDER`
 - `ONBOARDING_LLM_API_KEY` — optional, defaults to `LLM_API_KEY`
 - `ONBOARDING_LLM_MODEL` — optional, defaults to `LLM_MODEL` (use a cheaper model to save costs)
+- `SEARCH_LLM_PROVIDER` — optional, defaults to `LLM_PROVIDER`
+- `SEARCH_LLM_API_KEY` — optional, defaults to `LLM_API_KEY`
+- `SEARCH_LLM_MODEL` — optional, defaults to `LLM_MODEL` (use a cheaper model to save costs on job searches)
 - `SEARCH_API_KEY` — Tavily API key for web search tool
 - `ADZUNA_APP_ID` — Adzuna API application ID (for job search)
 - `ADZUNA_APP_KEY` — Adzuna API application key (for job search)
@@ -206,6 +219,10 @@ Environment variables are checked first, then `config.json`. Useful for developm
 - `tool_error` — `{"id": "...", "name": "...", "error": "..."}` — tool execution failed
 - `done` — `{"content": "full text"}` — agent finished
 - `onboarding_complete` — `{}` — onboarding interview finished (only in onboarding flow)
+- `search_started` — `{"query": "..."}` — job search sub-agent has begun
+- `search_result_added` — full `SearchResult` dict — a new result was added to the results panel
+- `search_progress` — `{"content": "..."}` — brief status update from the search sub-agent
+- `search_completed` — `{"results_added": N}` — job search sub-agent finished
 - `error` — `{"message": "..."}` — fatal error
 
 ## Conventions
@@ -242,6 +259,7 @@ Environment variables are checked first, then `config.json`. Useful for developm
 - Frontend pages live in `frontend/src/pages/`, reusable components in `frontend/src/components/`
 - API helper functions in `frontend/src/api.js` — all backend calls go through this module
 - **Live job list refresh:** `ChatPanel` has a `JOB_MUTATING_TOOLS` set that tracks which agent tools modify job data (currently `create_job`). When a `tool_result` SSE event fires for one of these tools, the panel calls `onJobsChanged()` which bumps a `jobsVersion` counter in `App`, causing `JobList` to re-fetch. **When adding a new agent tool that creates, updates, or deletes jobs, add its name to `JOB_MUTATING_TOOLS` in `frontend/src/components/ChatPanel.jsx`.**
+- **Job search results panel:** When the main agent calls `run_job_search`, a sub-agent emits `search_started`, `search_result_added`, and `search_completed` SSE events that ChatPanel handles to populate a `SearchResultsPanel` alongside the chat. Results persist per-conversation in the `search_results` DB table and are loaded when opening historical conversations. "Add to Tracker" promotes a `SearchResult` to a `Job` record and refreshes the job list.
 
 ## Best Practices
 

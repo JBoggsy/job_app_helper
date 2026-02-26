@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Job search sub-agent with results panel** — When the user asks the AI to search for jobs, a specialized sub-agent runs multiple searches, evaluates each job against the user profile (0-5 star rating), and populates a slide-out results panel next to the chat. Results are persistent per-conversation and each can be added to the job tracker with one click.
+- **SearchResult model** — New `backend/models/search_result.py` for per-conversation job search results with fit rating, description, and tracker promotion state
+- **Job search sub-agent** — New `backend/agent/job_search_agent.py` with `LangChainJobSearchAgent` that searches, scrapes, evaluates, and collects qualifying jobs (≥3 stars) via `add_search_result` tool
+- **Main agent search tools** — `run_job_search` tool delegates to sub-agent; `list_search_results` tool reads results for highlight commentary
+- **Search results API** — `GET /api/chat/conversations/:id/search-results` and `POST .../add-to-tracker` endpoints
+- **SearchResultsPanel component** — Slide-out panel with collapsible result cards, star ratings, fit reasons, and "Add to Tracker" buttons
+- **Search SSE events** — `search_started`, `search_result_added`, `search_progress`, `search_completed` events for real-time panel updates
+- **Search LLM config** — Separate `search_llm` configuration for the job search sub-agent (defaults to main LLM, recommended to use a cheaper model)
 - **Direct download links in releases** — Release workflow now generates clickable download links for each platform's installer in the GitHub Release description
 - **Direct download links in README** — Download table now links directly to the latest release artifacts instead of just linking to the Releases page
 - **Integration keys in setup wizard** — First-time setup wizard now includes a step for Tavily search and JSearch API keys with inline how-to guides and direct sign-up links

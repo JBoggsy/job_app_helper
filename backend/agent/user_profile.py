@@ -46,6 +46,21 @@ _No summary yet. The AI assistant will fill this in as it learns about you._
 
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 
+PROFILE_SECTIONS = [
+    "Summary",
+    "Education",
+    "Work Experience",
+    "Skills & Expertise",
+    "Fields of Interest",
+    "Salary Preferences",
+    "Location Preferences",
+    "Remote Work Preferences",
+    "Job Search Goals",
+    "Other Notes",
+]
+
+_SECTION_RE_TEMPLATE = r"^## {name}\n(.*?)(?=^## |\Z)"
+
 
 def get_profile_path() -> str:
     """Return the absolute path to the user profile markdown file."""
@@ -122,6 +137,33 @@ def write_profile(content: str) -> None:
     full = _serialize_frontmatter(meta, body)
     with open(path, "w", encoding="utf-8") as f:
         f.write(full)
+
+
+def read_profile_section(section_name: str) -> str | None:
+    """Return the content of a specific ## section from the profile body, or None if not found."""
+    body = read_profile()
+    pattern = re.compile(
+        _SECTION_RE_TEMPLATE.format(name=re.escape(section_name)),
+        re.MULTILINE | re.DOTALL,
+    )
+    m = pattern.search(body)
+    return m.group(1).strip() if m else None
+
+
+def write_profile_section(section_name: str, content: str) -> None:
+    """Replace a single ## section in the profile body, preserving all other sections."""
+    body = read_profile()
+    new_section_text = f"## {section_name}\n{content.strip()}\n\n"
+    pattern = re.compile(
+        _SECTION_RE_TEMPLATE.format(name=re.escape(section_name)),
+        re.MULTILINE | re.DOTALL,
+    )
+    if pattern.search(body):
+        new_body = pattern.sub(new_section_text, body)
+    else:
+        # Section missing — append it
+        new_body = body.rstrip("\n") + f"\n\n## {section_name}\n{content.strip()}\n"
+    write_profile(new_body)
 
 
 def ensure_profile_exists() -> None:

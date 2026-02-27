@@ -9,10 +9,10 @@ Consumers:
 
 Module layout:
     _registry.py        agent_tool decorator + _TOOL_REGISTRY
-    web_search.py       web_search
+    web_search.py       web_search, web_research
     job_search.py       job_search
     scrape_url.py       scrape_url
-    jobs.py             create_job, list_jobs
+    jobs.py             create_job, list_jobs, edit_job, remove_job, list_job_todos, add_job_todo, edit_job_todo, remove_job_todo
     profile.py          read_user_profile, update_user_profile
     resume.py           read_resume
     search_results.py   add_search_result, list_search_results

@@ -76,12 +76,27 @@ class AgentTools(
         self.event_callback = event_callback
 
     def execute(self, tool_name, arguments):
-        """Execute a tool by name with error handling."""
+        """Execute a tool by name with error handling.
+
+        Arguments are validated against the tool's args_schema (if any).
+        For tools with no args_schema, any LLM-hallucinated arguments
+        are ignored.  For tools with a schema, Pydantic validates and
+        strips unknown fields before dispatch.
+        """
         method = getattr(self, tool_name, None)
         if method is None or not hasattr(method, "_tool_description"):
             return {"error": f"Unknown tool: {tool_name}"}
+
+        schema = getattr(method, "_tool_args_schema", None)
         try:
-            return method(**arguments)
+            if schema is None:
+                # Tool takes no arguments — ignore anything the LLM sent
+                return method()
+            else:
+                # Validate through Pydantic, which strips unknown fields
+                # and raises on missing required fields
+                validated = schema(**arguments)
+                return method(**validated.model_dump())
         except Exception as e:
             logger.exception("Tool %s raised an exception", tool_name)
             return {"error": str(e)}

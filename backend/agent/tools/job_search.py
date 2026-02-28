@@ -84,13 +84,22 @@ class JobSearchMixin:
             "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
         }
 
-        resp = requests.get(
-            "https://jsearch.p.rapidapi.com/search",
-            headers=headers,
-            params=params,
-            timeout=15,
-        )
-        resp.raise_for_status()
+        # Retry once on timeout — JSearch can be slow
+        for attempt in range(2):
+            try:
+                resp = requests.get(
+                    "https://jsearch.p.rapidapi.com/search",
+                    headers=headers,
+                    params=params,
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                break
+            except requests.exceptions.ReadTimeout:
+                if attempt == 0:
+                    logger.warning("JSearch timeout on attempt 1, retrying…")
+                    continue
+                raise
         data = resp.json().get("data", [])
 
         results = []

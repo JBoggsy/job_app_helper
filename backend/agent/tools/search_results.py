@@ -1,9 +1,9 @@
 """Search result tools — add_search_result and list_search_results."""
 
 import logging
-from typing import Optional
+from typing import Annotated, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
 
 from ._registry import agent_tool
 
@@ -12,13 +12,29 @@ logger = logging.getLogger(__name__)
 VALID_REMOTE_TYPES = {"onsite", "hybrid", "remote"}
 
 
+def _coerce_int(v):
+    """Coerce float-like values to int (e.g. 4.0 → 4, 4.5 → 4).
+
+    Smaller models (Ollama) sometimes send floats for int fields.
+    """
+    if v is None:
+        return v
+    if isinstance(v, float):
+        return int(v)
+    return v
+
+
+CoercedInt = Annotated[int, BeforeValidator(_coerce_int)]
+CoercedOptionalInt = Annotated[Optional[int], BeforeValidator(_coerce_int)]
+
+
 class AddSearchResultInput(BaseModel):
     company: str = Field(description="Company name")
     title: str = Field(description="Job title")
-    job_fit: int = Field(description="Job fit rating 0-5 based on user profile match")
+    job_fit: CoercedInt = Field(description="Job fit rating 0-5 based on user profile match")
     url: Optional[str] = Field(default=None, description="Job posting URL")
-    salary_min: Optional[int] = Field(default=None, description="Minimum salary")
-    salary_max: Optional[int] = Field(default=None, description="Maximum salary")
+    salary_min: CoercedOptionalInt = Field(default=None, description="Minimum salary")
+    salary_max: CoercedOptionalInt = Field(default=None, description="Maximum salary")
     location: Optional[str] = Field(default=None, description="Job location")
     remote_type: Optional[str] = Field(default=None, description="Remote type: remote, hybrid, or onsite")
     source: Optional[str] = Field(default=None, description="Where the job was found (jsearch, adzuna, web)")
@@ -29,7 +45,7 @@ class AddSearchResultInput(BaseModel):
 
 
 class ListSearchResultsInput(BaseModel):
-    min_fit: Optional[int] = Field(default=None, description="Minimum fit rating 0-5")
+    min_fit: CoercedOptionalInt = Field(default=None, description="Minimum fit rating 0-5")
 
 
 class SearchResultsMixin:

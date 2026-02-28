@@ -3,7 +3,7 @@ import logging
 
 from flask import Blueprint, Response, current_app, request, stream_with_context
 
-from backend.agent.base import Agent, OnboardingAgent
+from backend.agent import ActiveAgent as Agent, ActiveOnboardingAgent as OnboardingAgent
 from backend.agent.user_profile import is_onboarding_in_progress, set_onboarding_in_progress
 from backend.config_manager import get_llm_config, get_onboarding_llm_config, get_integration_config
 from backend.database import db

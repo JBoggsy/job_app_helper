@@ -112,7 +112,7 @@ def parse_resume_with_llm():
     """
     from backend.config_manager import get_llm_config
     from backend.llm.langchain_factory import create_langchain_model
-    from backend.agent.base import ResumeParser
+    from backend.agent import ActiveResumeParser as ResumeParser
 
     # Get the raw resume text
     raw_text = get_resume_text()

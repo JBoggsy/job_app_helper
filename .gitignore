@@ -34,3 +34,4 @@ src-tauri/binaries/
 
 # PyInstaller
 *.spec
+.vscode/settings.json

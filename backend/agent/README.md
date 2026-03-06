@@ -157,8 +157,14 @@ classes are resolved at import time).
 | `streaming.py`        | SSE helpers                         | `yield_text`, `yield_tool_start/result/error`, `execute_tool_with_events` |
 | `prompts.py`          | Prompt templates                    | System prompts for routing agent and all 18 micro-agents |
 | `micro_agents.py`     | `BaseMicroAgent` + implementations  | `invoke()` for structured output, `stream()` for text; 18 concrete agents |
+| `dspy_modules.py`     | DSPy Module wrappers                | Structured-output modules with `forward()` + backward-compat `run()` |
+| `dspy_signatures.py`  | DSPy Signature definitions          | Input/output field specs for each DSPy module |
+| `dspy_lm.py`          | `LangChainLM`                       | DSPy ↔ LangChain adapter (avoids LiteLLM dependency) |
+| `feedback.py`         | Recording + scoring                 | Collects training examples, scores from user actions, metric functions |
+| `module_store.py`     | `save_module()` / `load_module_state()` | Persist compiled DSPy modules to `dspy_modules/` |
 | `entity_resolution.py`| `resolve_job_ref()`                 | Resolves "the Google job" → Job record by ID, company, or title |
-| `pipelines/`          | Pipeline functions                  | One `run()` function per request type (11 total) |
+| `pipeline_base.py`    | `Pipeline` + `ToolResult`           | Base class for pipeline subclasses with `exec_tool()` and `text()` helpers |
+| `pipelines/`          | Pipeline subclasses                 | One `Pipeline` subclass with `run()` wrapper per request type (11 total) |
 
 **How it works:**
 

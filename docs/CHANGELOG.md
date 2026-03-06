@@ -7,24 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Refactored
-- **AgentTools pending events** — Moved `_pending_events` queue and `flush_pending()` into `AgentTools`, eliminating duplicated event callback plumbing in `DefaultAgent`, `DefaultOnboardingAgent`, and `FixedPipelineAgent`
-- **Structured output Ollama-only fallback** — `BaseMicroAgent.invoke()` now uses native `with_structured_output()` (with one retry) for Anthropic/OpenAI/Gemini; JSON-in-text fallback is only used for Ollama
-- **Pipeline base class** — Added `Pipeline` base class and `ToolResult` container in `pipeline_base.py`; all 11 pipeline files converted from standalone functions to classes with shared `exec_tool()` and `text()` helpers
-- **Entity resolution scoring** — Replaced naive substring matching with tiered scoring (exact/prefix/word-boundary/substring) and auto-selection when the top match clearly beats the runner-up; single `list_jobs` call instead of two
-
 ### Added
+- **DSPy feedback collection** — Passively records evaluator and query generator micro-agent inputs/outputs as training examples (`dspy_examples` table); scores examples based on user add-to-tracker behavior and job_fit edits
+- **DSPy module optimization** — `POST /api/optimize` runs BootstrapFewShot on scored examples; `GET /api/optimize/status` reports readiness per module; optimized modules persist to disk and auto-load on startup
+- **DSPy module persistence** — Compiled DSPy modules saved/loaded as JSON in `dspy_modules/` under the data directory; EvaluatorModule and QueryGeneratorModule auto-load optimized state on init
+- **Optimization panel** — "Optimize" button in the header opens a slide-out panel showing per-module readiness (progress bars, scored example counts), a "Run Optimization" button, and optimization results
 - **Pluggable agent design system** — Agent implementations are now selectable via `agent.design` in config; new designs are sub-packages of `backend/agent/` with auto-discovery
 - **Default agent design** — Monolithic ReAct loop implementation (`backend/agent/default/`) with `DefaultAgent`, `DefaultOnboardingAgent`, `DefaultResumeParser`
 - **Fixed pipeline agent design** — Programmatic pipeline architecture (`backend/agent/fixed_pipeline/`) that replaces the monolithic ReAct loop with structured routing + micro-agents. A Routing Agent classifies user intent into one of 11 request types (find_jobs, research_url, track_crud, query_jobs, todo_mgmt, profile_mgmt, prepare, compare, research, general, multi_step), then a deterministic pipeline executes the right sequence of steps using scoped LLM calls only where reasoning is needed. Faster, cheaper, more predictable, and easier to debug than the default design. Activate with `"agent": {"design": "fixed_pipeline"}` in config.
 - **Ollama tool-call recovery** — When Ollama's server fails to parse a tool call (model prepends thinking text before JSON), the error handler extracts valid JSON from the raw response and matches it to the appropriate tool schema
 - **Agent job CRUD tools** — Implemented `create_job`, `list_jobs`, `edit_job`, and `remove_job` agent tools with full database access, input validation, and live job list refresh
 - **Agent todo tools** — Added `list_job_todos`, `add_job_todo`, `edit_job_todo`, and `remove_job_todo` agent tools so the AI assistant can manage per-job application todo items (documents, questions, assessments, etc.)
-
-### Removed
-- **Job enrichment** — Removed `backend/job_enrichment.py` and all automatic enrichment when adding jobs to tracker
-- **Scraper and todo extractor modules** — Removed `backend/scraper.py` and `backend/todo_extractor.py`; scraping and extraction are now exclusively handled by the agent
-- **Extract todos endpoint** — Removed `POST /api/jobs/:id/todos/extract`; "Extract from posting" button removed from Job Detail Panel
 
 ### Changed
 - **Agent ABCs** — Extracted abstract base classes (`Agent`, `OnboardingAgent`, `ResumeParser`) into `backend/agent/base.py`, decoupling the agent interface from any specific LLM framework. Routes now import from `base.py` instead of `langchain_agent.py`.
@@ -35,7 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **JSearch timeout and retry** — Increased JSearch API timeout to 30s with automatic retry on timeout
 - **Improved system prompt** — Added "Communication — CRITICAL" section requiring the agent to acknowledge, provide progress updates, summarize, and invite follow-up
 
+### Refactored
+- **AgentTools pending events** — Moved `_pending_events` queue and `flush_pending()` into `AgentTools`, eliminating duplicated event callback plumbing in `DefaultAgent`, `DefaultOnboardingAgent`, and `FixedPipelineAgent`
+- **Structured output Ollama-only fallback** — `BaseMicroAgent.invoke()` now uses native `with_structured_output()` (with one retry) for Anthropic/OpenAI/Gemini; JSON-in-text fallback is only used for Ollama
+- **Pipeline base class** — Added `Pipeline` base class and `ToolResult` container in `pipeline_base.py`; all 11 pipeline files converted from standalone functions to classes with shared `exec_tool()` and `text()` helpers
+- **Entity resolution scoring** — Replaced naive substring matching with tiered scoring (exact/prefix/word-boundary/substring) and auto-selection when the top match clearly beats the runner-up; single `list_jobs` call instead of two
+
 ### Removed
+- **Job enrichment** — Removed `backend/job_enrichment.py` and all automatic enrichment when adding jobs to tracker
+- **Scraper and todo extractor modules** — Removed `backend/scraper.py` and `backend/todo_extractor.py`; scraping and extraction are now exclusively handled by the agent
+- **Extract todos endpoint** — Removed `POST /api/jobs/:id/todos/extract`; "Extract from posting" button removed from Job Detail Panel
 - **`LangChainJobSearchAgent`** — Removed the job search sub-agent class and emptied `backend/agent/job_search_agent.py`. The `run_job_search` and `add_search_result` tools remain in `AgentTools`.
 - **`JobSearchSubAgentTools`** — Removed the `AgentTools` subclass; `add_search_result` moved to the base `AgentTools`.
 - **LangChain class names** — `LangChainAgent`, `LangChainOnboardingAgent`, `LangChainResumeParser` renamed to `Agent`, `OnboardingAgent`, `ResumeParser`. Old names available via backwards-compat shim in `langchain_agent.py`.

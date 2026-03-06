@@ -75,7 +75,10 @@ shortlist/
 │   ├── models/
 │   │   ├── __init__.py            # Model exports
 │   │   ├── job.py                 # Job model with CRUD methods
-│   │   └── chat.py                # Conversation and Message models
+│   │   ├── chat.py                # Conversation and Message models
+│   │   ├── search_result.py       # SearchResult model (per-conversation job search results)
+│   │   ├── application_todo.py    # ApplicationTodo model (per-job application steps)
+│   │   └── dspy_example.py        # DspyExample model (training examples for DSPy optimization)
 │   ├── resume_parser.py               # Resume parsing (PDF via PyMuPDF, DOCX via python-docx), parsed JSON storage
 │   ├── routes/
 │   │   ├── __init__.py
@@ -83,15 +86,33 @@ shortlist/
 │   │   ├── chat.py                # Chat endpoints with SSE streaming
 │   │   ├── profile.py             # User profile endpoints
 │   │   ├── resume.py              # Resume upload, fetch, delete, LLM parse endpoints
+│   │   ├── optimize.py            # DSPy optimization endpoints (trigger + status)
 │   │   └── config.py              # Config and health check endpoints
 │   ├── llm/
 │   │   ├── langchain_factory.py   # create_langchain_model() — returns LangChain BaseChatModel
 │   │   └── model_listing.py       # list_models() per provider, MODEL_LISTERS registry
 │   └── agent/
+│       ├── __init__.py            # Design selector (imports Active* classes by config)
 │       ├── base.py                # ABCs: Agent, OnboardingAgent, ResumeParser
-│       ├── tools.py               # AgentTools class with @agent_tool methods and Pydantic schemas
-│       ├── langchain_agent.py     # Backwards-compat shim (re-exports from base.py)
-│       └── user_profile.py        # User profile file management
+│       ├── tools/                 # AgentTools with @agent_tool methods and Pydantic schemas
+│       ├── user_profile.py        # User profile file management
+│       ├── default/               # Default design: monolithic ReAct loop
+│       └── fixed_pipeline/        # Fixed pipeline design: routing + micro-agents + DSPy
+│           ├── agent.py           # FixedPipelineAgent main entry
+│           ├── routing.py         # Intent classification
+│           ├── schemas.py         # Pydantic schemas for routing and pipelines
+│           ├── context.py         # Per-request cache (RequestContext)
+│           ├── streaming.py       # SSE helpers
+│           ├── prompts.py         # All prompt templates
+│           ├── micro_agents.py    # BaseMicroAgent + 18 concrete agents
+│           ├── dspy_modules.py    # DSPy Module wrappers for structured output
+│           ├── dspy_signatures.py # DSPy Signature definitions
+│           ├── dspy_lm.py         # LangChain ↔ DSPy adapter
+│           ├── feedback.py        # Training example recording + scoring
+│           ├── module_store.py    # Save/load compiled DSPy modules
+│           ├── entity_resolution.py # Job ref → ID with tiered scoring
+│           ├── pipeline_base.py   # Pipeline base class + ToolResult
+│           └── pipelines/         # One Pipeline subclass per request type (11 total)
 ├── frontend/
 │   ├── vite.config.js             # Vite config (React, Tailwind CSS plugin, proxy)
 │   ├── package.json
@@ -192,11 +213,11 @@ shortlist/
 
 **`backend/agent/base.py`**: Abstract base classes defining the agent interfaces: `Agent` (main chat agent), `OnboardingAgent` (profile interview), `ResumeParser` (non-streaming resume JSON extraction). These ABCs specify the constructor signatures and abstract methods (`run()` for agents, `parse()` for resume parser) that concrete implementations must satisfy. Routes import from here.
 
-**`backend/agent/tools.py`**: Defines the `AgentTools` class with `@agent_tool`-decorated methods for all available tools (`web_search`, `job_search`, `scrape_url`, `create_job`, `list_jobs`, `edit_job`, `remove_job`, `read_user_profile`, `update_user_profile`, `read_resume`, `run_job_search`, `add_search_result`, `list_search_results`). Includes Pydantic input schemas for each tool, `execute()` for dispatching tool calls by name, and `get_tool_definitions()` for returning tool metadata. Agent implementations are responsible for adapting tool definitions to their specific LLM framework.
-
-**`backend/agent/langchain_agent.py`**: Backwards-compatibility shim that re-exports `Agent`, `OnboardingAgent`, and `ResumeParser` from `base.py` under the old `LangChain*` names.
+**`backend/agent/tools/`**: Tool implementations as `@agent_tool`-decorated functions. Available tools: `web_search`, `job_search`, `scrape_url`, `create_job`, `list_jobs`, `edit_job`, `remove_job`, `list_job_todos`, `add_job_todo`, `edit_job_todo`, `remove_job_todo`, `read_user_profile`, `update_user_profile`, `read_resume`, `add_search_result`, `list_search_results`. Includes Pydantic input schemas for each tool, `execute()` for dispatching tool calls by name, and `get_tool_definitions()` for returning tool metadata. Agent implementations are responsible for adapting tool definitions to their specific LLM framework.
 
 **`backend/agent/user_profile.py`**: User profile file management with YAML frontmatter parsing. Handles reading, writing, and onboarding status checking.
+
+**`backend/routes/optimize.py`**: Optimization blueprint mounted at `/api/optimize`. Provides `POST /api/optimize` to run DSPy BootstrapFewShot optimization on modules with enough scored training examples, and `GET /api/optimize/status` to check per-module readiness (scored/unscored counts, optimization state). See `docs/DSPy_OPTIMIZATION.md` for the full guide.
 
 #### Frontend
 
@@ -220,7 +241,7 @@ shortlist/
 
 **`frontend/src/components/ModelCombobox.jsx`**: Searchable combobox for selecting an LLM model. Fetches available models from the provider's API with a client-side cache (5-minute TTL). Falls back to free-text input if the API call fails or no API key is entered yet.
 
-**`frontend/src/components/SetupWizard.jsx`**: Centered modal wizard for first-time setup. Four steps: welcome, provider selection (2×2 card grid), API key entry with always-visible inline how-to guide and test connection, and a done screen that launches onboarding. Requires a successful connection test before allowing the user to continue (Ollama skips the key requirement). Calls `onComplete()` to open onboarding chat or `onClose()` to dismiss.
+**`frontend/src/components/SetupWizard.jsx`**: Centered modal wizard for first-time setup. Five steps: welcome, provider selection (2×2 card grid), API key entry with inline how-to guide and test connection, integration keys (Tavily + JSearch) with inline how-to guides, and a done screen that launches onboarding. Requires a successful connection test before allowing the user to continue (Ollama skips the key requirement). Calls `onComplete()` to open onboarding chat or `onClose()` to dismiss.
 
 **`frontend/src/components/Toast.jsx`**: Toast notification system (`useToast` hook and `ToastContainer` component). Supports error, warning, and info types with collapsible technical details. Error toasts require manual dismissal; others auto-dismiss after 5 seconds.
 
@@ -450,6 +471,8 @@ Auto-generated:
 | GET | `/api/chat/conversations/:id` | Get conversation with messages | — | `{conversation with messages}` |
 | DELETE | `/api/chat/conversations/:id` | Delete conversation | — | `204 No Content` |
 | POST | `/api/chat/conversations/:id/messages` | Send message | `{content}` | SSE stream |
+| GET | `/api/chat/conversations/:id/search-results` | Get search results | — | `[{searchResult}, ...]` |
+| POST | `/api/chat/conversations/:id/search-results/:resultId/add-to-tracker` | Promote to tracker | — | `{result, job}` |
 
 **SSE Event Types** (chat streaming):
 
@@ -458,6 +481,7 @@ Auto-generated:
 - `tool_result`: `{"id": "...", "name": "...", "result": {...}}` — Tool completed successfully
 - `tool_error`: `{"id": "...", "name": "...", "error": "..."}` — Tool execution failed
 - `done`: `{"content": "full text"}` — Agent finished
+- `search_result_added`: `{...searchResult}` — Job search result added (opens results panel)
 - `error`: `{"message": "..."}` — Fatal error
 
 ### Onboarding API
@@ -506,6 +530,24 @@ The raw text is extracted using PyMuPDF (PDF) or python-docx (DOCX, including ta
 
 The `POST /api/resume/parse` endpoint uses `ResumeParser` to send the raw extracted text to the configured LLM, which cleans up PDF/DOCX extraction artifacts (broken formatting, garbled characters, merged words) and returns structured JSON with fields like `contact_info`, `work_experience`, `education`, `skills`, `certifications`, `projects`, and more. The structured data is persisted as `resume_parsed.json` and returned by subsequent `GET /api/resume` calls.
 
+### Application Todos API
+
+| Method | Endpoint | Description | Request Body | Response |
+|--------|----------|-------------|--------------|----------|
+| GET | `/api/jobs/:id/todos` | List todos for a job | — | `[{todo}, ...]` |
+| POST | `/api/jobs/:id/todos` | Create a todo | `{title, category?, description?}` | `{todo}` |
+| PATCH | `/api/jobs/:id/todos/:todoId` | Update a todo | `{title?, completed?, ...}` | `{todo}` |
+| DELETE | `/api/jobs/:id/todos/:todoId` | Delete a todo | — | `204 No Content` |
+
+### Optimize API (DSPy)
+
+| Method | Endpoint | Description | Request Body | Response |
+|--------|----------|-------------|--------------|----------|
+| POST | `/api/optimize` | Run BootstrapFewShot optimization | `{teacher_model?}` (opt) | `{status, modules_optimized, examples_used, errors?}` |
+| GET | `/api/optimize/status` | Check per-module readiness | — | `[{module_name, scored_count, unscored_count, min_required, ready, has_optimized_module, last_optimized}]` |
+
+The optimize endpoints are used to train DSPy modules with user feedback. See `docs/DSPy_OPTIMIZATION.md` for the full guide on how the feedback loop works.
+
 **Configuration Object Format:**
 ```json
 {
@@ -518,6 +560,14 @@ The `POST /api/resume/parse` endpoint uses `ResumeParser` to send the raw extrac
     "provider": "",
     "api_key": "",
     "model": ""
+  },
+  "search_llm": {
+    "provider": "",
+    "api_key": "",
+    "model": ""
+  },
+  "agent": {
+    "design": "default"
   },
   "integrations": {
     "search_api_key": "",
@@ -533,6 +583,9 @@ The `POST /api/resume/parse` endpoint uses `ResumeParser` to send the raw extrac
 ```
 
 **Note**: API keys are masked with asterisks when returned via GET `/api/config`.
+
+- `agent.design`: selects the agent implementation (`"default"` or `"fixed_pipeline"`). See [Agent Designs](#agent-designs).
+- `search_llm`: optional cheaper model for job search evaluations (defaults to main `llm`).
 
 ## Database Models
 
@@ -593,6 +646,26 @@ class Message(db.Model):
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 ```
+
+### DspyExample Model
+
+Located in `backend/models/dspy_example.py`. Stores training examples for DSPy module optimization.
+
+**Schema:**
+
+```python
+class DspyExample(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    module_name = db.Column(db.String(100), nullable=False, index=True)  # e.g. "evaluator", "query_generator"
+    inputs_json = db.Column(db.Text, nullable=False)     # JSON-serialized input fields
+    output_json = db.Column(db.Text, nullable=False)     # JSON-serialized output
+    score = db.Column(db.Float, nullable=True)            # 0.0-1.0, NULL until scored
+    metadata_json = db.Column(db.Text, nullable=True)     # conversation_id, etc.
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+    scored_at = db.Column(db.DateTime, nullable=True)
+```
+
+Examples are recorded automatically during pipeline runs and scored when users add search results to the tracker or edit job fit ratings. See `docs/DSPy_OPTIMIZATION.md` for details.
 
 ## LLM Provider System
 
@@ -718,9 +791,20 @@ A structured routing + deterministic pipeline architecture. A Routing Agent clas
 - Via environment variable: `export AGENT_DESIGN=fixed_pipeline`
 - Restart the application for changes to take effect
 
+#### DSPy Optimization (Fixed Pipeline)
+
+The fixed pipeline design uses [DSPy](https://dspy.ai/) for structured-output micro-agents (EvaluatorModule, QueryGeneratorModule, etc.). These modules can be optimized with few-shot examples collected from user behavior:
+
+1. **Feedback collection** — When the pipeline runs job searches, inputs/outputs of the evaluator and query generator are recorded as `DspyExample` rows (score = NULL)
+2. **Scoring** — When users add search results to the tracker or edit job fit ratings, examples are scored (0.0–1.0)
+3. **Optimization** — `POST /api/optimize` runs DSPy BootstrapFewShot to compile optimized modules with few-shot demos
+4. **Persistence** — Compiled modules are saved to `dspy_modules/` and auto-loaded on startup
+
+See `docs/DSPy_OPTIMIZATION.md` for the complete guide.
+
 ### Available Tools
 
-Defined in `backend/agent/tools.py`:
+Defined in `backend/agent/tools/`:
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
@@ -729,10 +813,15 @@ Defined in `backend/agent/tools.py`:
 | `scrape_url` | Fetch and parse a web page | `url` |
 | `create_job` | Add a job to the database | `company`, `title` (required); plus all optional job fields |
 | `list_jobs` | List and filter tracked jobs | `status` (opt), `company` (opt), `title` (opt), `url` (opt), `limit` (opt) |
+| `edit_job` | Update an existing job | `job_id` (required); plus fields to update |
+| `remove_job` | Delete a job from the tracker | `job_id` |
+| `list_job_todos` | List application todos for a job | `job_id` |
+| `add_job_todo` | Create an application todo | `job_id`, `title` (required); `category`, `description` (opt) |
+| `edit_job_todo` | Update an application todo | `job_id`, `todo_id` (required); plus fields to update |
+| `remove_job_todo` | Delete an application todo | `job_id`, `todo_id` |
 | `read_user_profile` | Read the user's profile markdown | — |
 | `update_user_profile` | Update the user's profile | `content` |
 | `read_resume` | Read the user's uploaded resume text | — |
-| `run_job_search` | Launch a comprehensive job search sub-agent | `query`, `location` (opt), `remote_only` (opt), `salary_min`/`salary_max` (opt) |
 | `add_search_result` | Add a qualifying job to search results panel | `company`, `title`, `job_fit` (required); plus optional fields |
 | `list_search_results` | List search results from current conversation | `min_fit` (opt) |
 
@@ -773,8 +862,8 @@ Once complete, it sets the `onboarded: true` flag in the user profile frontmatte
 
 ### Adding a New Tool
 
-1. Create a Pydantic input model in `backend/agent/tools.py`
-2. Add the `@agent_tool`-decorated method to the `AgentTools` class in `backend/agent/tools.py`
+1. Create a Pydantic input model in the appropriate file under `backend/agent/tools/`
+2. Add the `@agent_tool`-decorated function in `backend/agent/tools/`
 3. If the tool mutates jobs, add its name to `JOB_MUTATING_TOOLS` in `frontend/src/components/ChatPanel.jsx` to trigger live list refresh
 
 Example:

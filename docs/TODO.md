@@ -19,6 +19,7 @@
 - [x] Main agent delegates job searches to specialized sub-agent via `run_job_search` tool (v0.9.0)
 - [x] Fixed pipeline agent design — structured routing + micro-agents replacing the monolithic ReAct loop
 - [x] Job application preparation — interview prep, cover letters, resume tailoring, question generation (via fixed_pipeline prepare pipeline)
+- [x] DSPy feedback collection and optimization — passive training example recording, user-action scoring, BootstrapFewShot optimization with module persistence
 
 ## Features
 

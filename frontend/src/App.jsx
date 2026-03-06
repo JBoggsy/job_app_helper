@@ -4,6 +4,7 @@ import ChatPanel from "./components/ChatPanel";
 import ProfilePanel from "./components/ProfilePanel";
 import SettingsPanel from "./components/SettingsPanel";
 import HelpPanel from "./components/HelpPanel";
+import OptimizationPanel from "./components/OptimizationPanel";
 import UpdateBanner from "./components/UpdateBanner";
 import SetupWizard from "./components/SetupWizard";
 import { ToastContainer, useToast } from "./components/Toast";
@@ -47,6 +48,7 @@ function App() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [optimizationOpen, setOptimizationOpen] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [pendingOnboarding, setPendingOnboarding] = useState(false);
@@ -166,6 +168,16 @@ function App() {
               Help
             </button>
             <button
+              onClick={() => setOptimizationOpen(true)}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2"
+              title="Optimize AI"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Optimize
+            </button>
+            <button
               onClick={() => setSettingsOpen(true)}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2"
               title="Settings"
@@ -214,6 +226,7 @@ function App() {
       />
       <ProfilePanel isOpen={profileOpen} onClose={() => setProfileOpen(false)} />
       <HelpPanel isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
+      <OptimizationPanel isOpen={optimizationOpen} onClose={() => setOptimizationOpen(false)} />
       <SettingsPanel
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}

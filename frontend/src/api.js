@@ -11,6 +11,7 @@ const CHAT_BASE = `${API_BASE}/api/chat`;
 const PROFILE_BASE = `${API_BASE}/api/profile`;
 const CONFIG_BASE = `${API_BASE}/api/config`;
 const RESUME_BASE = `${API_BASE}/api/resume`;
+const OPTIMIZE_BASE = `${API_BASE}/api/optimize`;
 
 export async function fetchJobs() {
   const res = await fetch(BASE);
@@ -325,5 +326,23 @@ export async function parseResumeWithLLM() {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Failed to parse resume");
+  return data;
+}
+
+// Optimize API
+
+export async function fetchOptimizationStatus() {
+  const res = await fetch(`${OPTIMIZE_BASE}/status`);
+  if (!res.ok) throw new Error("Failed to fetch optimization status");
+  return res.json();
+}
+
+export async function runOptimization() {
+  const res = await fetch(OPTIMIZE_BASE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.errors ? JSON.stringify(data.errors) : "Optimization failed");
   return data;
 }

@@ -157,6 +157,36 @@ conventional ReAct loop: the LLM reasons about the outcome, selects tools,
 observes results, and iterates until the outcome is met. Any outcome that
 doesn't match a specialised workflow lands here, so the agent is never stuck.
 
+### Registered Workflows
+
+| Key | Class | Description |
+|-----|-------|-------------|
+| `general` | `GeneralWorkflow` | Fallback ReAct loop with full tool-set for arbitrary outcomes |
+| `job_search` | `JobSearchWorkflow` | Generate diverse search queries, execute them, evaluate fit (0–5★), filter < 3★, return curated results |
+| `add_to_tracker` | `AddToTrackerWorkflow` | Identify referenced search results and promote them to the job tracker |
+| `edit_job` | `EditJobWorkflow` | Identify referenced tracker job, extract field updates, apply them |
+| `remove_jobs` | `RemoveJobsWorkflow` | Identify referenced tracker job(s) and delete them |
+| `scrape_job_posting` | `ScrapeJobPostingWorkflow` | Scrape a URL, extract structured job fields, assess fit |
+| `compare_jobs` | `CompareJobsWorkflow` | Side-by-side comparison of multiple jobs (compensation, fit, pros/cons) |
+| `specialize_resume` | `SpecializeResumeWorkflow` | Interactive resume tailoring for a target job |
+| `write_cover_letter` | `WriteCoverLetterWorkflow` | Interactive cover letter writing for a target job |
+| `prep_interview` | `PrepInterviewWorkflow` | Generate tailored interview prep (questions, STAR answers, research topics) |
+| `application_todos` | `ApplicationTodosWorkflow` | Manage application step checklists for a tracked job |
+| `update_profile` | `UpdateProfileWorkflow` | Interactively update the user's job search profile |
+
+### Shared Resolvers
+
+Many workflows need to identify which job(s) or search result(s) the user is
+referring to. Rather than re-implementing this logic per-workflow, the
+`workflows/resolvers.py` module provides reusable DSPy modules:
+
+- **`JobResolver`** — resolves user references to jobs in the tracker
+  (by company name, title, URL, position in list, etc.). Returns a list of
+  `ResolvedJob` objects with confidence scores.
+- **`SearchResultResolver`** — resolves user references to search results
+  in the current conversation. Returns a list of `ResolvedSearchResult`
+  objects with confidence scores.
+
 ---
 
 ## Micro-Agents

@@ -115,3 +115,14 @@ def available_workflow_names() -> list[str]:
 # ---------------------------------------------------------------------------
 
 from . import general as _general  # noqa: E402, F401
+from . import job_search as _job_search  # noqa: E402, F401
+from . import add_to_tracker as _add_to_tracker  # noqa: E402, F401
+from . import edit_job as _edit_job  # noqa: E402, F401
+from . import remove_jobs as _remove_jobs  # noqa: E402, F401
+from . import specialize_resume as _specialize_resume  # noqa: E402, F401
+from . import write_cover_letter as _write_cover_letter  # noqa: E402, F401
+from . import scrape_job_posting as _scrape_job_posting  # noqa: E402, F401
+from . import compare_jobs as _compare_jobs  # noqa: E402, F401
+from . import prep_interview as _prep_interview  # noqa: E402, F401
+from . import application_todos as _application_todos  # noqa: E402, F401
+from . import update_profile as _update_profile  # noqa: E402, F401

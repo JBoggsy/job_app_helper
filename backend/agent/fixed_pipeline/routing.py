@@ -5,8 +5,7 @@ import logging
 from langchain_core.language_models import BaseChatModel
 from pydantic import ValidationError
 
-from .micro_agents import BaseMicroAgent
-from .prompts import ROUTING_SYSTEM_PROMPT
+from .dspy_modules import RoutingModule
 from .schemas import PARAM_SCHEMAS, RoutingResult
 
 logger = logging.getLogger(__name__)
@@ -36,10 +35,8 @@ def route(model: BaseChatModel, messages: list[dict]) -> RoutingResult:
     logger.info("Routing — %d messages, last user msg: %s",
                 len(messages), user_msg[-200:] if user_msg else "(empty)")
 
-    agent = BaseMicroAgent(model)
-
     try:
-        result = _invoke_router(agent, user_msg)
+        result = _invoke_router(user_msg)
 
         # Validate params against the pipeline's schema; retry once on failure
         for attempt in range(MAX_PARAM_RETRIES + 1):
@@ -55,7 +52,7 @@ def route(model: BaseChatModel, messages: list[dict]) -> RoutingResult:
                             result.request_type, attempt + 1, e,
                         )
                         retry_msg = _format_validation_error(user_msg, result, e)
-                        result = _invoke_router(agent, retry_msg)
+                        result = _invoke_router(retry_msg)
                     else:
                         logger.warning(
                             "Param validation failed for %s after retry: %s — falling back to general",
@@ -86,13 +83,10 @@ def route(model: BaseChatModel, messages: list[dict]) -> RoutingResult:
     )
 
 
-def _invoke_router(agent: BaseMicroAgent, user_msg: str) -> RoutingResult:
-    """Invoke the routing agent and return a validated RoutingResult."""
-    result = agent.invoke(
-        ROUTING_SYSTEM_PROMPT,
-        user_msg,
-        output_schema=RoutingResult,
-    )
+def _invoke_router(user_msg: str) -> RoutingResult:
+    """Invoke the routing agent via DSPy module and return a validated RoutingResult."""
+    module = RoutingModule()
+    result = module(conversation_context=user_msg)
     if isinstance(result, RoutingResult):
         return result
     if isinstance(result, dict):

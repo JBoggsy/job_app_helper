@@ -9,12 +9,14 @@ import logging
 import time
 from collections.abc import Generator
 
+import dspy
 from langchain_core.language_models import BaseChatModel
 
 from backend.agent.base import Agent
 from backend.agent.tools import AgentTools
 
 from .context import RequestContext
+from .dspy_lm import create_dspy_lm
 from .pipelines import PIPELINE_REGISTRY
 from .routing import route
 from .streaming import yield_done, yield_error, yield_text
@@ -38,6 +40,9 @@ class FixedPipelineAgent(Agent):
         self.model = model
         self.conversation_id = conversation_id
 
+        # Create DSPy LM adapter (used via dspy.context in run())
+        self._dspy_lm = create_dspy_lm(model)
+
         self.tools = AgentTools(
             search_api_key=search_api_key,
             adzuna_app_id=adzuna_app_id,
@@ -49,6 +54,13 @@ class FixedPipelineAgent(Agent):
 
     def run(self, messages: list[dict]) -> Generator[dict, None, None]:
         """Run the agent: route → acknowledge → execute pipeline → done."""
+        # Use dspy.context so the LM is set per-thread without mutating
+        # global DSPy state (avoids cross-thread RuntimeError).
+        with dspy.context(lm=self._dspy_lm):
+            yield from self._run_inner(messages)
+
+    def _run_inner(self, messages: list[dict]) -> Generator[dict, None, None]:
+        """Inner run logic, executed inside a dspy.context block."""
         full_text = ""
 
         try:

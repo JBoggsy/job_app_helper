@@ -224,6 +224,13 @@ def add_search_result_to_tracker(convo_id, result_id):
     logger.info("add_to_tracker: job id=%d company=%s title=%s",
                 job.id, result.company, result.title)
 
+    # Score DSPy feedback examples based on user add-to-tracker behavior
+    try:
+        from backend.agent.fixed_pipeline.feedback import score_from_tracker_add
+        score_from_tracker_add(result_id)
+    except Exception as e:
+        logger.debug("DSPy feedback scoring skipped: %s", e)
+
     return {
         "result": result.to_dict(),
         "job": job.to_dict(),

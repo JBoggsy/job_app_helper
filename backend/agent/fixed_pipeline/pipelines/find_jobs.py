@@ -3,6 +3,7 @@
 import json
 import logging
 
+from ..feedback import record_evaluator_example, record_query_generator_example
 from ..micro_agents import (
     EvaluatorAgent,
     QueryGeneratorAgent,
@@ -82,7 +83,8 @@ class FindJobsPipeline(Pipeline):
         logger.info("[FindJobsPipeline] evaluating %d jobs against profile", len(deduped))
         evaluations = _evaluate_jobs(self.model, deduped, profile, resume_summary,
                                       user_intent=p.user_intent,
-                                      soft_constraints=p.soft_constraints)
+                                      soft_constraints=p.soft_constraints,
+                                      conversation_id=self.ctx.tools.conversation_id)
         logger.info("[FindJobsPipeline] evaluations done — %d results", len(evaluations))
 
         # Step 6: Filter and add search results
@@ -144,6 +146,13 @@ class FindJobsPipeline(Pipeline):
             agent = QueryGeneratorAgent(self.model)
             result = agent.run(system_prompt, f"Generate search queries for: {p.query}")
             if hasattr(result, "queries"):
+                # Record feedback example
+                try:
+                    record_query_generator_example(
+                        self.ctx.tools.conversation_id, criteria, profile, result,
+                    )
+                except Exception as e:
+                    logger.debug("Failed to record query_generator example: %s", e)
                 return [{"query": q.query, "location": q.location, "remote_only": q.remote_only}
                         for q in result.queries]
         except Exception as e:
@@ -172,7 +181,8 @@ class FindJobsPipeline(Pipeline):
 
 
 def _evaluate_jobs(model, jobs: list[dict], profile: str, resume_summary: str,
-                   *, user_intent: str = "", soft_constraints: list[str] | None = None) -> dict:
+                   *, user_intent: str = "", soft_constraints: list[str] | None = None,
+                   conversation_id: int | None = None) -> dict:
     """Evaluate jobs against profile using micro-agent. Returns {index: {job_fit, fit_reason}}."""
     if not jobs:
         return {}
@@ -197,6 +207,12 @@ def _evaluate_jobs(model, jobs: list[dict], profile: str, resume_summary: str,
         agent = EvaluatorAgent(model)
         result = agent.run(system_prompt, "Evaluate these jobs against the user's profile.")
         if hasattr(result, "evaluations"):
+            # Record feedback example
+            try:
+                if conversation_id:
+                    record_evaluator_example(conversation_id, system_prompt, jobs_text, result)
+            except Exception as fe:
+                logger.debug("Failed to record evaluator example: %s", fe)
             return {e.index: {"job_fit": e.job_fit, "fit_reason": e.fit_reason}
                     for e in result.evaluations}
     except Exception as e:

@@ -64,6 +64,15 @@ def update_job(job_id):
         val = data["applied_date"]
         job.applied_date = date.fromisoformat(val) if val else None
     db.session.commit()
+
+    # Score DSPy feedback when user edits job_fit on a tracker-promoted job
+    if "job_fit" in data:
+        try:
+            from backend.agent.fixed_pipeline.feedback import score_from_job_edit
+            score_from_job_edit(job_id, data)
+        except Exception as e:
+            logger.debug("DSPy feedback scoring skipped: %s", e)
+
     return jsonify(job.to_dict())
 
 

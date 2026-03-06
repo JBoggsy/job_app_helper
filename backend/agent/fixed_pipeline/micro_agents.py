@@ -2,6 +2,10 @@
 
 Micro-agents are scoped LLM calls — each gets a focused prompt and produces
 either structured output (via invoke) or streamed text (via stream).
+
+Structured-output agents (QueryGeneratorAgent, EvaluatorAgent, etc.) delegate
+to DSPy modules in dspy_modules.py. Text-streaming agents remain as direct
+LangChain calls since DSPy streaming requires LiteLLM.
 """
 
 import json
@@ -14,6 +18,15 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from backend.agent.default.agent import _extract_text
 
 from . import schemas
+from .dspy_modules import (
+    DetailExtractionModule,
+    EvaluatorModule,
+    FitEvaluatorModule,
+    ProfileUpdateModule,
+    QueryGeneratorModule,
+    ResearchQueryModule,
+    TodoGeneratorModule,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -154,51 +167,51 @@ class AnalysisAgent(BaseMicroAgent):
 
 
 class ProfileUpdateAgent(BaseMicroAgent):
-    """Interpret natural-language profile updates."""
+    """Interpret natural-language profile updates. Delegates to DSPy module."""
 
     def run(self, system_prompt: str, user_message: str) -> schemas.ProfileUpdateResult:
-        """Return structured profile updates."""
-        return self.invoke(system_prompt, user_message, schemas.ProfileUpdateResult)
+        """Return structured profile updates via DSPy."""
+        return ProfileUpdateModule().run(system_prompt, user_message)
 
 
 class TodoGeneratorAgent(BaseMicroAgent):
-    """Generate application preparation todos."""
+    """Generate application preparation todos. Delegates to DSPy module."""
 
     def run(self, system_prompt: str, user_message: str) -> schemas.TodoGeneratorResult:
-        """Return structured todo list."""
-        return self.invoke(system_prompt, user_message, schemas.TodoGeneratorResult)
+        """Return structured todo list via DSPy."""
+        return TodoGeneratorModule().run(system_prompt, user_message)
 
 
 class QueryGeneratorAgent(BaseMicroAgent):
-    """Generate optimized job search queries."""
+    """Generate optimized job search queries. Delegates to DSPy module."""
 
     def run(self, system_prompt: str, user_message: str) -> schemas.QueryGeneratorResult:
-        """Return structured search queries."""
-        return self.invoke(system_prompt, user_message, schemas.QueryGeneratorResult)
+        """Return structured search queries via DSPy."""
+        return QueryGeneratorModule().run(system_prompt, user_message)
 
 
 class EvaluatorAgent(BaseMicroAgent):
-    """Evaluate job results against user profile."""
+    """Evaluate job results against user profile. Delegates to DSPy module."""
 
     def run(self, system_prompt: str, user_message: str) -> schemas.JobEvaluationResult:
-        """Return structured evaluations."""
-        return self.invoke(system_prompt, user_message, schemas.JobEvaluationResult)
+        """Return structured evaluations via DSPy."""
+        return EvaluatorModule().run(system_prompt, user_message)
 
 
 class DetailExtractionAgent(BaseMicroAgent):
-    """Extract structured job details from raw data."""
+    """Extract structured job details from raw data. Delegates to DSPy module."""
 
     def run(self, system_prompt: str, user_message: str) -> schemas.JobDetails:
-        """Return structured job details."""
-        return self.invoke(system_prompt, user_message, schemas.JobDetails)
+        """Return structured job details via DSPy."""
+        return DetailExtractionModule().run(system_prompt, user_message)
 
 
 class FitEvaluatorAgent(BaseMicroAgent):
-    """Deep fit analysis with strengths and gaps."""
+    """Deep fit analysis with strengths and gaps. Delegates to DSPy module."""
 
     def run(self, system_prompt: str, user_message: str) -> schemas.FitEvaluation:
-        """Return structured fit evaluation."""
-        return self.invoke(system_prompt, user_message, schemas.FitEvaluation)
+        """Return structured fit evaluation via DSPy."""
+        return FitEvaluatorModule().run(system_prompt, user_message)
 
 
 class ResultsSummaryAgent(BaseMicroAgent):
@@ -266,11 +279,11 @@ class RankingAgent(BaseMicroAgent):
 
 
 class ResearchQueryAgent(BaseMicroAgent):
-    """Generate research search queries."""
+    """Generate research search queries. Delegates to DSPy module."""
 
     def run(self, system_prompt: str, user_message: str) -> schemas.SearchQueryList:
-        """Return structured search queries."""
-        return self.invoke(system_prompt, user_message, schemas.SearchQueryList)
+        """Return structured search queries via DSPy."""
+        return ResearchQueryModule().run(system_prompt, user_message)
 
 
 class ResearchSynthesizerAgent(BaseMicroAgent):

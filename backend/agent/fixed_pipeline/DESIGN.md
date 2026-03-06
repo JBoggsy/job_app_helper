@@ -3,10 +3,10 @@
 A programmatic pipeline architecture that replaces the monolithic ReAct loop
 with **structured routing + micro-agents**. Instead of giving a single LLM
 free-form access to all tools and hoping it reasons its way to the right
-sequence of actions, the orchestrator classifies user intent, extracts
-structured parameters, and then executes a **deterministic pipeline** for
-each request type — invoking small, focused LLM calls ("micro-agents") only
-at the specific steps that genuinely require natural-language reasoning.
+sequence of actions, the agent classifies user intent, extracts structured
+parameters, and then executes a **deterministic pipeline** for each request
+type — invoking small, focused LLM calls ("micro-agents") only at the
+specific steps that genuinely require natural-language reasoning.
 
 ---
 
@@ -14,7 +14,7 @@ at the specific steps that genuinely require natural-language reasoning.
 
 The `default` monolithic ReAct agent works but has structural weaknesses:
 
-| Problem | Root Cause | Orchestrator Fix |
+| Problem | Root Cause | Fixed Pipeline Fix |
 |---|---|---|
 | Slow multi-step tasks | LLM reasons about what to do next on every iteration | Programmatic pipeline knows the plan; LLM only runs where needed |
 | Unpredictable tool sequences | LLM may call tools in a suboptimal order or skip steps | Pipeline enforces correct ordering |
@@ -32,8 +32,8 @@ The `default` monolithic ReAct agent works but has structural weaknesses:
 └────────────────────────────────┬────────────────────────────────────┘
                                  │
                     ┌────────────▼─────────────┐
-                    │      Routing Agent        │
-                    │  (single LLM call)        │
+                    │    Routing Agent (DSPy)   │
+                    │    (single LLM call)      │
                     │                           │
                     │  Extracts:                │
                     │   • request_type (enum)   │
@@ -59,13 +59,15 @@ The `default` monolithic ReAct agent works but has structural weaknesses:
 
 ### Core Principles
 
-1. **Classify once, execute deterministically.** The Routing Agent is the only
-   "creative" LLM call at the top level. After that, the pipeline for each
-   request type is a fixed sequence of steps.
+1. **Classify once, execute deterministically.** The Routing Agent (a DSPy
+   `ChainOfThought` module) is the only "creative" LLM call at the top
+   level. After that, the pipeline for each request type is a fixed
+   sequence of steps.
 
 2. **Micro-agents are scoped.** Each micro-agent gets only the context it
    needs (not the entire tool set) and produces structured output validated
-   by a Pydantic schema. This makes them cheaper, faster, and more reliable.
+   by a Pydantic schema, or streams free-form text. This makes them
+   cheaper, faster, and more reliable.
 
 3. **Programmatic steps don't need LLMs.** Database queries, API calls, data
    filtering, and response formatting are pure Python. The LLM is only
@@ -79,6 +81,12 @@ The `default` monolithic ReAct agent works but has structural weaknesses:
    `backend/agent/tools/` is used for all DB and API operations. Micro-agents
    do NOT get direct tool access — the pipeline calls tools programmatically
    and passes results to micro-agents as context.
+
+6. **DSPy integration enables optimization.** Structured-output micro-agents
+   are implemented as DSPy modules with `ChainOfThought` signatures. Training
+   examples are collected passively from pipeline runs and scored based on
+   user actions (tracker adds, fit edits). BootstrapFewShot optimization
+   compiles few-shot examples into modules, improving quality over time.
 
 ---
 
@@ -104,55 +112,62 @@ The Routing Agent classifies every user message into one of these types:
 
 ## Routing Agent
 
-A single LLM call with a structured-output schema. No tools bound.
+A DSPy `ChainOfThought` module (`RoutingModule`) that classifies user intent
+in a single LLM call. No tools bound.
 
 ### Input
 - System prompt: routing instructions + brief summary of each request type
-- User message (+ last ~3 messages of conversation history for context)
+  (defined in `ROUTING_SYSTEM_PROMPT` in `prompts.py`)
+- Conversation context: the last 6 messages of history (`HISTORY_WINDOW = 6`)
 
-### Output (Pydantic schema)
+### Output
 
-```python
-class RoutingResult(BaseModel):
-    """Structured output from the Routing Agent."""
-    request_type: Literal[
-        "find_jobs", "research_url", "track_crud", "query_jobs",
-        "todo_mgmt", "profile_mgmt", "prepare", "compare",
-        "research", "general", "multi_step",
-    ]
-    params: dict          # Type-specific parameters (see per-pipeline schemas)
-    entity_refs: list[str]  # Job names, IDs, URLs referenced by the user
-    acknowledgment: str   # Brief message acknowledging the user's request
-```
+The `RoutingModule` (via the `RouteRequest` DSPy signature) produces a
+`RoutingResult` with:
 
-The `acknowledgment` field is immediately streamed as `text_delta` so the user
-sees feedback before the pipeline starts executing.
+- `request_type` — one of the 11 types above
+- `params` — type-specific parameters, validated against the corresponding
+  Pydantic schema from `schemas.py` (e.g., `FindJobsParams`, `TrackCrudParams`)
+- `entity_refs` — job names, IDs, URLs referenced by the user
+- `acknowledgment` — brief message streamed immediately as `text_delta` so
+  the user sees feedback before the pipeline starts executing
 
-### Structured Output and Fallback Strategy
+### Validation and Fallback
 
-The Routing Agent asks the LLM to produce JSON matching the `RoutingResult`
-schema. The implementation should:
-
-1. **Prefer native structured output** — Use LangChain's
-   `model.with_structured_output(RoutingResult)` which maps to the provider's
-   native JSON/function-calling mode (OpenAI JSON mode, Anthropic tool_use,
-   etc.).
-2. **Fallback to JSON-in-text** — If the model doesn't support structured
-   output, include the schema in the system prompt and parse the JSON from
-   the response text.
-3. **Validate with Pydantic** — All micro-agent outputs are validated through
-   Pydantic models. If validation fails, retry once with the error message
-   appended, then fall back to the `general` pipeline (which is a single
-   unconstrained LLM call, equivalent to the old ReAct agent with no tools).
+1. The `route()` function in `routing.py` invokes the `RoutingModule` and
+   validates the extracted params against `PARAM_SCHEMAS` (a dict mapping
+   each request type to its Pydantic model).
+2. If validation fails, it retries once (`MAX_PARAM_RETRIES = 1`) with
+   the error appended to context.
+3. If routing or validation still fails, it falls back to the `general`
+   pipeline (a single unconstrained LLM call).
 
 ---
 
-## Pipeline Definitions
+## Pipeline Architecture
 
 Each pipeline is a sequence of **steps**. Steps are either:
 
 - **Programmatic** — pure Python (DB query, API call, data transform, template)
 - **Micro-agent** — a scoped LLM call with a specific prompt and output schema
+
+All pipelines extend the `Pipeline` base class (`pipeline_base.py`) which
+provides:
+
+- `exec_tool(name, arguments)` — programmatically calls a tool via
+  `execute_tool_with_events()` and yields SSE events
+- `text(content)` — helper to yield a `text_delta` event
+- `execute()` — abstract method that subclasses override (a generator
+  yielding SSE event dicts)
+
+The `ToolResult` container class stores tool outputs and exposes `is_error`
+and `error` properties for pipeline control flow.
+
+### Pipeline Registry
+
+All pipelines are registered in `PIPELINE_REGISTRY` (`pipelines/__init__.py`),
+a dict mapping request type strings to pipeline classes. The main agent
+looks up the pipeline by the routing result's `request_type`.
 
 ### Key: Reading Pipeline Diagrams
 
@@ -165,99 +180,61 @@ Each pipeline is a sequence of **steps**. Steps are either:
 
 ---
 
-### Pipeline 1: `find_jobs`
+### `find_jobs`
 
 Find jobs matching user-specified criteria via job board APIs.
 
-**Params schema:**
-```python
-class FindJobsParams(BaseModel):
-    query: str                          # Core search terms
-    location: str | None = None         # City, state, region
-    remote_type: str | None = None      # "remote", "hybrid", "onsite"
-    salary_min: int | None = None       # Minimum salary
-    salary_max: int | None = None       # Maximum salary
-    company_type: str | None = None     # "startup", "enterprise", etc.
-    employment_type: str | None = None  # "fulltime", "contract", etc.
-    date_posted: str | None = None      # "today", "3days", "week", "month"
-    num_results: int = 10               # Desired number of results
-```
-
-**Steps:**
+**Params:** `FindJobsParams` — `query`, `location`, `remote_type`,
+`salary_min/max`, `company_type`, `employment_type`, `date_posted`,
+`num_results`, `user_intent`, `soft_constraints`
 
 ```
 [load user profile + resume summary]
     │
     ▼
-«Query Generator Agent»
+«Query Generator» (DSPy: QueryGeneratorModule)
     Input:  FindJobsParams + user profile summary
-    Output: list[JobSearchInput] (1-3 query variations)
+    Output: QueryGeneratorResult (1-4 query variations)
+    [records query_generator training example]
     │
     ▼
 [execute job_search() for each query]  ──► raw API results
     │
     ▼
-[deduplicate results by URL / company+title]
+[deduplicate results by URL, then by company+title]
     │
     ▼
-«Evaluator Agent»
-    Input:  deduplicated results + user profile + resume
-    Output: list[EvaluatedJob] with job_fit (0-5) + fit_reason
+«Evaluator» (DSPy: EvaluatorModule)
+    Input:  deduplicated results + user profile + resume + soft_constraints
+    Output: JobEvaluationResult with job_fit (0-5) + fit_reason per job
+    [records evaluator training example]
     │
     ▼
-[filter: keep jobs with job_fit >= 3]
+[filter: keep jobs with job_fit >= 3, up to num_results]
     │
     ▼
-[for each passing job:]
-    ├──► «Detail Extraction Agent» (if description is sparse)
-    │       Input:  raw job data
-    │       Output: structured fields (requirements, nice_to_haves, etc.)
-    │
-    ├──► [attempt first-party URL resolution]
-    │       [scrape_url on third-party link]
-    │       ~~► «URL Extractor Agent» if scraping finds employer link
-    │
-    └──► [call add_search_result() — emits SSE event]
+[for each passing job: call add_search_result() — emits SSE event]
     │
     ▼
-«Results Summary Agent»
+«Results Summary» (streaming text)
     Input:  all added results + search params
     Output: narrative summary for the user
-    │
-    ▼
-[stream summary as text_delta, yield done]
 ```
-
-**Micro-agents in this pipeline:**
-
-| Agent | Input | Output Schema | Purpose |
-|---|---|---|---|
-| Query Generator | search params + profile | `list[JobSearchInput]` | Generate optimized API queries |
-| Evaluator | job results + profile | `list[EvaluatedJob]` | Rate fit 0-5 with reasons |
-| Detail Extraction | raw job data | `JobDetails` | Extract structured fields from sparse listings |
-| URL Extractor | scraped page text | `{url: str}` | Find first-party URL in page content |
-| Results Summary | final results + params | `str` (free text) | Narrate findings for the user |
 
 ---
 
-### Pipeline 2: `research_url`
+### `research_url`
 
 Analyze a URL provided by the user (job posting, company page, etc.).
 
-**Params schema:**
-```python
-class ResearchUrlParams(BaseModel):
-    url: str                            # The URL to research
-    intent: str = "analyze"             # "analyze", "add_to_tracker", "compare_to_profile"
-```
-
-**Steps:**
+**Params:** `ResearchUrlParams` — `url`, `intent` (`"analyze"` or
+`"add_to_tracker"`)
 
 ```
 [scrape_url(url)]  ──► raw page content
     │
     ▼
-«Detail Extraction Agent»
+«Detail Extraction» (DSPy: DetailExtractionModule)
     Input:  raw page content + URL
     Output: JobDetails (company, title, salary, requirements, etc.)
     │
@@ -265,706 +242,439 @@ class ResearchUrlParams(BaseModel):
 [load user profile + resume]
     │
     ▼
-«Fit Evaluator Agent»
+«Fit Evaluator» (DSPy: FitEvaluatorModule)
     Input:  extracted details + profile + resume
-    Output: {job_fit: int, fit_reason: str, strengths: list, gaps: list}
+    Output: FitEvaluation (job_fit, fit_reason, strengths, gaps)
     │
     ▼
-[if intent includes adding to tracker:]
-    ├──► [create_job() with extracted fields + fit score]
-    └──► [emit tool_start/tool_result SSE events]
+[if intent == "add_to_tracker": create_job() with extracted fields]
     │
     ▼
-«Analysis Summary Agent»
+«Analysis Summary» (streaming text)
     Input:  extracted details + fit evaluation
     Output: narrative analysis for the user
-    │
-    ▼
-[stream summary, yield done]
 ```
 
 ---
 
-### Pipeline 3: `track_crud`
+### `track_crud`
 
 Create, update, or delete jobs in the tracker. Mostly programmatic.
 
-**Params schema:**
-```python
-class TrackCrudParams(BaseModel):
-    action: Literal["create", "edit", "delete"]
-    job_ref: str | None = None          # Job reference (name, ID, "the Google job")
-    job_id: int | None = None           # Resolved job ID (if directly specified)
-    fields: dict = {}                   # Fields to set/update
-```
-
-**Steps:**
+**Params:** `TrackCrudParams` — `action` (`create`/`edit`/`delete`),
+`job_ref`, `job_id`, `fields`
 
 ```
-[resolve entity: job_ref → job_id]
-    │ If ambiguous (multiple matches):
-    │   ~~► ask user to clarify (yield text_delta with options)
-    │   ~~► (this ends the pipeline; user's next message re-enters routing)
-    │
-    ▼
-[validate fields against Job model]
+[resolve entity: job_ref → job_id via entity_resolution]
+    │ If ambiguous: ask user to clarify (yield text with options)
     │
     ▼
 [execute tool:]
-    ├── action="create" → create_job(fields)
-    ├── action="edit"   → edit_job(job_id, fields)
-    └── action="delete" → remove_job(job_id)
+    ├── create → create_job(fields)
+    ├── edit   → edit_job(job_id, fields)
+    └── delete → remove_job(job_id)
     │
     ▼
-[emit tool_start + tool_result SSE events]
-    │
-    ▼
-[template confirmation message]
-    "Added [title] at [company] to your tracker."
-    "Updated [company] [title]: status → interviewing."
-    "Removed [company] [title] from your tracker."
-    │
-    ▼
-[stream confirmation, yield done]
+[template confirmation message with salary/location formatting]
 ```
 
-No micro-agents needed for straightforward CRUD. If the user's fields are
-expressed in natural language that needs interpretation (e.g., "set the salary
-to about 180" → `salary_min: 170000, salary_max: 190000`), the Routing Agent
-handles that extraction in the `params.fields` output.
+No micro-agents needed. The Routing Agent handles natural-language field
+extraction (e.g., "salary about 180" → `salary_min: 170000`).
 
 ---
 
-### Pipeline 4: `query_jobs`
+### `query_jobs`
 
 Query, filter, and summarize tracked jobs.
 
-**Params schema:**
-```python
-class QueryJobsParams(BaseModel):
-    filters: dict = {}                  # {status: ..., company: ..., title: ...}
-    question: str | None = None         # Natural-language question about jobs
-    format: Literal["list", "summary", "count"] = "list"
-```
-
-**Steps:**
+**Params:** `QueryJobsParams` — `filters`, `question`, `format`
+(`list`/`summary`/`count`)
 
 ```
-[execute list_jobs(filters)]  ──► job records
+[list_jobs(filters)]  ──► job records
     │
-    ▼
-[check: is this a simple listing or a complex question?]
+    ├── Simple (list/count/summary):
+    │       [format using template with status emojis + job details]
     │
-    ├── Simple (list/count with basic filters):
-    │       [format results as table/list/count using template]
-    │       [stream response, yield done]
-    │
-    └── Complex (needs analysis — "best fit", "recommend", ranking):
-            │
-            ▼
-        [load user profile]
-            │
-            ▼
-        «Analysis Agent»
-            Input:  job records + profile + question
-            Output: narrative analysis
-            │
-            ▼
-        [stream analysis, yield done]
+    └── Complex ("best fit", "recommend", etc.):
+            «Analysis» (streaming text)
+                Input:  job records + profile + question
 ```
 
 ---
 
-### Pipeline 5: `todo_mgmt`
+### `todo_mgmt`
 
-Manage application todos — list, create, toggle, generate.
+Manage application todos.
 
-**Params schema:**
-```python
-class TodoMgmtParams(BaseModel):
-    action: Literal["list", "toggle", "create", "generate", "delete"]
-    job_ref: str | None = None
-    job_id: int | None = None
-    todo_id: int | None = None
-    todo_data: dict = {}                 # {title, category, description, completed}
-```
-
-**Steps:**
+**Params:** `TodoMgmtParams` — `action` (`list`/`toggle`/`create`/
+`generate`/`delete`), `job_ref`, `job_id`, `todo_id`, `todo_data`
 
 ```
 [resolve job_ref → job_id]
     │
-    ▼
-[branch by action:]
-    │
-    ├── "list":
-    │       [list_job_todos(job_id)]
-    │       [format as checklist, stream, done]
-    │
-    ├── "toggle":
-    │       [edit_job_todo(job_id, todo_id, completed=True/False)]
-    │       [confirm: "Marked '[title]' as done."]
-    │
-    ├── "create":
-    │       [add_job_todo(job_id, todo_data)]
-    │       [confirm: "Added todo: '[title]'"]
-    │
-    ├── "delete":
-    │       [remove_job_todo(job_id, todo_id)]
-    │       [confirm: "Removed todo: '[title]'"]
-    │
-    └── "generate":
-            │
-            ▼
-        [load job record + requirements]
-        [load user profile + resume]
-            │
-            ▼
-        «Todo Generator Agent»
-            Input:  job details + profile + resume
-            Output: list[{title, category, description}]
-            │
-            ▼
-        [add_job_todo() × N]
-        [confirm: "Created N prep tasks for your [company] application."]
+    ├── list:     [list_job_todos → format checklist]
+    ├── toggle:   [edit_job_todo(completed=!) → confirm]
+    ├── create:   [add_job_todo(todo_data) → confirm]
+    ├── delete:   [remove_job_todo → confirm]
+    └── generate:
+            «Todo Generator» (DSPy: TodoGeneratorModule)
+                Input:  job details + profile + resume
+                Output: TodoGeneratorResult (5-10 tasks)
+            [add_job_todo() × N → confirm]
 ```
 
 ---
 
-### Pipeline 6: `profile_mgmt`
+### `profile_mgmt`
 
 Read or update the user profile.
 
-**Params schema:**
-```python
-class ProfileMgmtParams(BaseModel):
-    action: Literal["read", "update"]
-    section: str | None = None          # Specific section to update
-    content: str | None = None          # New content (if simple update)
-    natural_update: str | None = None   # Free-text update needing interpretation
-```
-
-**Steps:**
+**Params:** `ProfileMgmtParams` — `action` (`read`/`update`), `section`,
+`content`, `natural_update`
 
 ```
-[branch by action:]
-    │
-    ├── "read":
-    │       [read_user_profile()]
-    │       [format and present]
-    │
-    └── "update":
-            │
-            ▼
-        [is this a simple section update or a complex natural-language one?]
-            │
-            ├── Simple (section + content both clear):
-            │       [update_user_profile(section, content)]
-            │       [confirm: "Updated your [section]."]
-            │
-            └── Complex (needs interpretation):
-                    │
-                    ▼
-                [read_user_profile() — get current state]
-                    │
-                    ▼
-                «Profile Update Agent»
-                    Input:  current profile + user's natural-language update
-                    Output: list[{section: str, content: str}] — sections to update
-                    │
-                    ▼
-                [update_user_profile(section, content) × N]
-                [confirm: "Updated [sections]."]
+├── read:    [read_user_profile → present]
+└── update:
+        ├── Simple (section + content): [update_user_profile → confirm]
+        └── Complex (natural language):
+                «Profile Update» (DSPy: ProfileUpdateModule)
+                    Input:  current profile + update text
+                    Output: ProfileUpdateResult (section updates)
+                [apply updates → confirm]
 ```
 
 ---
 
-### Pipeline 7: `prepare`
+### `prepare`
 
-Help the user prepare for a job application (interview prep, cover letter,
-resume tailoring, question prep).
+Interview prep, cover letters, resume tailoring, question prep.
 
-**Params schema:**
-```python
-class PrepareParams(BaseModel):
-    prep_type: Literal["interview", "cover_letter", "resume_tailor", "questions", "general"]
-    job_ref: str | None = None
-    job_id: int | None = None
-    specifics: str | None = None         # Additional context from the user
-```
-
-**Steps:**
+**Params:** `PrepareParams` — `prep_type` (`interview`/`cover_letter`/
+`resume_tailor`/`questions`/`general`), `job_ref`, `job_id`, `specifics`
 
 ```
-[resolve job_ref → job_id → full Job record]
+[resolve job_ref → Job record]
+[gather: profile + resume + job details]
     │
-    ▼
-[gather context (parallel):]
-    ├── Job record (details, requirements, nice_to_haves)
-    ├── User profile (read_user_profile)
-    ├── Resume (read_resume)
-    └── Existing todos (list_job_todos)
-    │
-    ▼
-[branch by prep_type:]
-    │
-    ├── "interview":
-    │       «Interview Prep Agent»
-    │           Input:  job + profile + resume + specifics
-    │           Output: talk tracks, STAR stories, company research, tips
-    │
-    ├── "cover_letter":
-    │       «Cover Letter Agent»
-    │           Input:  job + profile + resume + specifics
-    │           Output: formatted cover letter draft
-    │
-    ├── "resume_tailor":
-    │       «Resume Tailor Agent»
-    │           Input:  resume + job requirements + profile
-    │           Output: list of suggested edits / emphasis changes
-    │
-    ├── "questions":
-    │       «Question Generator Agent»
-    │           Input:  job + company + role level
-    │           Output: likely questions + answer frameworks
-    │
-    └── "general":
-            «General Prep Agent»
-                Input:  job + profile + resume + specifics
-                Output: holistic preparation advice
-    │
-    ▼
-[optionally generate todos from prep output:]
-    ~~► add_job_todo() for each actionable prep step
-    │
-    ▼
-[stream prep content, yield done]
+    ├── interview:     «Interview Prep» (streaming)
+    ├── cover_letter:  «Cover Letter» (streaming)
+    ├── resume_tailor: «Resume Tailor» (streaming, uses full resume)
+    ├── questions:     «Question Generator» (streaming)
+    └── general:       «Interview Prep» (streaming, fallback)
 ```
 
 ---
 
-### Pipeline 8: `compare`
+### `compare`
 
 Compare or rank multiple jobs.
 
-**Params schema:**
-```python
-class CompareParams(BaseModel):
-    job_refs: list[str]                  # References to jobs to compare
-    job_ids: list[int] = []              # Resolved IDs
-    dimensions: list[str] = []           # What to compare on (salary, fit, remote, etc.)
-    mode: Literal["compare", "rank", "pros_cons"] = "compare"
-```
-
-**Steps:**
+**Params:** `CompareParams` — `job_refs`, `job_ids`, `dimensions`, `mode`
+(`compare`/`rank`/`pros_cons`)
 
 ```
-[resolve all job_refs → job_ids → Job records]
-    │
-    ▼
+[resolve all job_refs → Job records]
 [load user profile]
     │
-    ▼
-[branch by mode:]
-    │
-    ├── "compare" (2+ specific jobs):
-    │       «Comparison Agent»
-    │           Input:  job records + profile + dimensions
-    │           Output: side-by-side analysis
-    │
-    ├── "rank" (sort a set of jobs by criteria):
-    │       «Ranking Agent»
-    │           Input:  job records + profile + criteria
-    │           Output: ordered list with scores + explanations
-    │
-    └── "pros_cons" (deep dive on 1 job):
-            «Analysis Agent»
-                Input:  job record + profile + resume
-                Output: strengths, weaknesses, overall recommendation
-    │
-    ▼
-[optionally update job_fit ratings on the records:]
-    ~~► edit_job(job_id, job_fit=score) for each
-    │
-    ▼
-[stream analysis, yield done]
+    ├── compare:   «Comparison» (streaming) — side-by-side analysis
+    ├── rank:      «Ranking» (streaming) — scored list
+    └── pros_cons: «Analysis» (streaming) — single job deep dive
 ```
 
 ---
 
-### Pipeline 9: `research`
+### `research`
 
-General research — company culture, salary data, interview processes, industry.
+General research — company culture, salary data, interview processes.
 
-**Params schema:**
-```python
-class ResearchParams(BaseModel):
-    topic: str                           # What to research
-    research_type: Literal["company", "salary", "interview_process", "industry", "general"]
-    company: str | None = None           # Specific company (if applicable)
-    role: str | None = None              # Specific role (if applicable)
-```
-
-**Steps:**
+**Params:** `ResearchParams` — `topic`, `research_type` (`company`/`salary`/
+`interview_process`/`industry`/`general`), `company`, `role`
 
 ```
-«Query Generator Agent»
-    Input:  research params
-    Output: list[str] — 2-4 search queries
+«Research Query Generator» (DSPy: ResearchQueryModule)
+    Output: SearchQueryList (2-4 queries)
     │
     ▼
-[execute web_search() and/or web_research() for each query]
+[web_search() for each query, up to 4]
     │
     ▼
-[collect results]
-    │
-    ▼
-«Research Synthesizer Agent»
-    Input:  search results + original topic + user profile
+«Research Synthesizer» (streaming)
+    Input:  search results + topic + profile
     Output: narrative report with citations
-    │
-    ▼
-[stream report, yield done]
 ```
 
 ---
 
-### Pipeline 10: `general`
+### `general`
 
 Catch-all for career advice, app guidance, and open-ended questions.
 
-**Params schema:**
-```python
-class GeneralParams(BaseModel):
-    question: str                        # The user's question
-    needs_job_context: bool = False      # Whether to load job data
-    needs_profile: bool = False          # Whether to load profile
-    job_ref: str | None = None           # Referenced job (if any)
-```
-
-**Steps:**
+**Params:** `GeneralParams` — `question`, `needs_job_context`,
+`needs_profile`, `job_ref`
 
 ```
-[conditionally gather context:]
-    ├── needs_job_context? → list_jobs() and/or resolve job_ref
-    ├── needs_profile? → read_user_profile()
-    └── (always available: conversation history)
+[conditionally load: profile, resume_summary, jobs, conversation history]
     │
     ▼
-«Advisor Agent»
-    Input:  question + gathered context + conversation history
-    Output: free-text advice
-    │
-    ▼
-[stream response, yield done]
+«Advisor» (streaming)
+    Input:  question + context + last 6 messages of history
 ```
 
-This is the **fallback pipeline** — it's essentially a single scoped LLM call
-with relevant context. If routing fails or the request doesn't fit any
-specific pipeline, it lands here.
+This is the **fallback pipeline**. If routing fails or the request doesn't
+fit any specific pipeline, it lands here.
 
 ---
 
-### Pipeline 11: `multi_step`
+### `multi_step`
 
 Composite requests that chain multiple pipelines.
 
-**Params schema:**
-```python
-class MultiStepParams(BaseModel):
-    steps: list[dict]                    # Each dict has {type: str, params: dict}
-    # Steps are referenced by their pipeline types above
-```
-
-**Steps:**
+**Params:** `MultiStepParams` — `steps` (list of `{type, params}` dicts)
 
 ```
-[build execution plan from steps list]
-    │
-    ▼
 [for each step:]
-    ├── [stream progress: "Step 1/3: Searching for jobs..."]
-    ├── [execute sub-pipeline (reuses the other pipelines above)]
-    ├── [capture outputs for downstream steps]
-    │       (e.g., step 2 can reference "jobs found in step 1")
-    └── [stream step completion: "Found 12 jobs, added top 3."]
-    │
-    ▼
-[stream final summary encompassing all steps, yield done]
+    [stream "Step N/total" divider]
+    [dispatch to PIPELINE_REGISTRY → execute sub-pipeline]
+    [catch per-step exceptions without stopping]
+[stream "All steps complete"]
 ```
 
 ---
 
-## Micro-Agent Inventory
+## Micro-Agent Architecture
 
-Each micro-agent is a **single LLM call** with:
-- A focused system prompt
-- Structured input (passed as user message or context)
-- Structured output validated by Pydantic (where applicable)
-- No tool bindings (tools are called programmatically by the pipeline)
+Micro-agents come in two flavors, both defined in `micro_agents.py`:
 
-| Micro-Agent | Used By Pipelines | Input | Output |
+### Structured-Output Agents (via DSPy)
+
+These use DSPy `ChainOfThought` modules for reliable structured output.
+Each has a corresponding DSPy signature (`dspy_signatures.py`) and module
+(`dspy_modules.py`). The `BaseMicroAgent.invoke()` method handles:
+
+1. Calling `model.with_structured_output(schema)` for providers that
+   support it
+2. Falling back to JSON-in-text parsing for Ollama
+3. Retrying once on validation failure
+
+| Agent Class | DSPy Module | Output Schema | Used By |
 |---|---|---|---|
-| **Routing Agent** | (top-level) | user message + recent history | `RoutingResult` |
-| **Query Generator** | find_jobs, research | search params + profile | `list[query strings]` |
-| **Evaluator** | find_jobs | job results + profile | `list[EvaluatedJob]` with 0-5 fit |
-| **Detail Extraction** | find_jobs, research_url | raw job data or page text | `JobDetails` structured fields |
-| **URL Extractor** | find_jobs, research_url | scraped page text | `{url: str}` |
-| **Results Summary** | find_jobs | final results + params | free text summary |
-| **Fit Evaluator** | research_url, compare | job details + profile | fit score + strengths/gaps |
-| **Analysis Summary** | research_url | extracted details + fit | free text analysis |
-| **Analysis** | query_jobs, compare | jobs + profile + question | free text analysis |
-| **Profile Update** | profile_mgmt | current profile + update text | `list[{section, content}]` |
-| **Todo Generator** | todo_mgmt, prepare | job + profile + resume | `list[{title, category, desc}]` |
-| **Interview Prep** | prepare | job + profile + resume | talk tracks, stories, tips |
-| **Cover Letter** | prepare | job + profile + resume | formatted draft |
-| **Resume Tailor** | prepare | resume + job reqs | suggested edits |
-| **Question Generator** | prepare | job + company + level | questions + answer frameworks |
-| **Comparison** | compare | jobs + profile + dimensions | side-by-side analysis |
-| **Ranking** | compare | jobs + profile + criteria | ordered scored list |
-| **Research Synthesizer** | research | search results + topic | narrative report w/ citations |
-| **Advisor** | general | question + context | free text advice |
+| `QueryGeneratorAgent` | `QueryGeneratorModule` | `QueryGeneratorResult` | find_jobs |
+| `EvaluatorAgent` | `EvaluatorModule` | `JobEvaluationResult` | find_jobs |
+| `DetailExtractionAgent` | `DetailExtractionModule` | `JobDetails` | find_jobs, research_url |
+| `FitEvaluatorAgent` | `FitEvaluatorModule` | `FitEvaluation` | research_url |
+| `ProfileUpdateAgent` | `ProfileUpdateModule` | `ProfileUpdateResult` | profile_mgmt |
+| `TodoGeneratorAgent` | `TodoGeneratorModule` | `TodoGeneratorResult` | todo_mgmt |
+| `ResearchQueryAgent` | `ResearchQueryModule` | `SearchQueryList` | research |
+
+### Text-Streaming Agents
+
+These use `BaseMicroAgent.stream()` for free-form text responses. The
+pipeline yields `text_delta` events as chunks arrive from `model.stream()`.
+
+| Agent Class | Prompt Constant | Used By |
+|---|---|---|
+| `AdvisorAgent` | `ADVISOR_PROMPT` | general |
+| `AnalysisAgent` | `ANALYSIS_PROMPT` | query_jobs, compare |
+| `ResultsSummaryAgent` | `RESULTS_SUMMARY_PROMPT` | find_jobs |
+| `AnalysisSummaryAgent` | `ANALYSIS_SUMMARY_PROMPT` | research_url |
+| `InterviewPrepAgent` | `INTERVIEW_PREP_PROMPT` | prepare |
+| `CoverLetterAgent` | `COVER_LETTER_PROMPT` | prepare |
+| `ResumeTailorAgent` | `RESUME_TAILOR_PROMPT` | prepare |
+| `QuestionGeneratorAgent` | `QUESTION_GENERATOR_PROMPT` | prepare |
+| `ComparisonAgent` | `COMPARISON_PROMPT` | compare |
+| `RankingAgent` | `RANKING_PROMPT` | compare |
+| `ResearchSynthesizerAgent` | `RESEARCH_SYNTHESIZER_PROMPT` | research |
 
 ---
 
-## SSE Streaming Strategy
+## DSPy Integration
 
-The frontend expects the same SSE events as the default agent. The orchestrator
-produces them as follows:
+The fixed pipeline uses DSPy for structured-output micro-agents and supports
+BootstrapFewShot optimization to improve quality over time.
 
-| SSE Event | When Emitted |
-|---|---|
-| `text_delta` | Routing acknowledgment; progress updates between steps; micro-agent text streamed incrementally |
-| `tool_start` | Before executing any programmatic tool call (e.g., `job_search`, `create_job`) |
-| `tool_result` | After a programmatic tool call completes |
-| `tool_error` | If a tool call fails |
-| `search_result_added` | When `add_search_result()` is called (same as default) |
-| `done` | Pipeline complete — includes full accumulated text |
-| `error` | Fatal pipeline error |
+### LangChain ↔ DSPy Bridge (`dspy_lm.py`)
 
-Micro-agents that produce long-form text (summaries, cover letters, prep
-content) should be **streamed** — the pipeline uses `model.stream()` and
-yields `text_delta` events as chunks arrive. Micro-agents that produce
-structured output (routing, evaluation, query generation) use non-streaming
-`model.invoke()` since their output must be parsed as a whole.
+`LangChainLM` extends `dspy.BaseLM` to adapt LangChain's `BaseChatModel` to
+DSPy's LM interface. The `create_dspy_lm()` factory wraps a LangChain model
+and DSPy calls run via `dspy.context(lm=...)` for thread-safe execution.
+
+### DSPy Signatures (`dspy_signatures.py`)
+
+Eight signatures define the input/output contracts for structured agents:
+`RouteRequest`, `GenerateSearchQueries`, `EvaluateJobs`, `UpdateProfile`,
+`GenerateTodos`, `ExtractJobDetails`, `EvaluateFit`, `GenerateResearchQueries`.
+Each includes detailed docstrings that serve as DSPy instructions.
+
+### DSPy Modules (`dspy_modules.py`)
+
+Each module wraps a `ChainOfThought(Signature)` call. Two modules —
+`QueryGeneratorModule` and `EvaluatorModule` — load saved optimized state
+on initialization via `module_store.py`.
+
+### Module State Persistence (`module_store.py`)
+
+Compiled DSPy modules are saved/loaded from `dspy_modules/{name}.json`.
+Functions: `save_module()`, `load_module_state()`, `has_optimized_module()`,
+`get_last_modified()`.
+
+### Feedback Collection (`feedback.py`)
+
+Training examples are recorded passively from pipeline runs:
+
+- `record_evaluator_example()` — saves evaluator inputs/outputs as
+  `DspyExample` rows
+- `record_query_generator_example()` — saves query generator inputs/outputs
+
+Examples are scored based on user actions:
+
+- `score_from_tracker_add()` — when user adds a search result to their
+  tracker, scores both evaluator accuracy and query generator relevance
+- `score_from_job_edit()` — when user edits a job's fit rating, penalizes
+  evaluator proportionally to the distance from the agent's prediction
+
+Metric functions (`evaluator_metric`, `query_gen_metric`) return the stored
+score for BootstrapFewShot. The `/api/optimize` endpoint triggers optimization
+and compiled modules persist in `dspy_modules/` for auto-load on startup.
+
+---
+
+## SSE Streaming
+
+The frontend expects the same SSE events as the default agent. The
+`streaming.py` module provides helper functions that produce SSE event dicts:
+
+| Helper Function | SSE Event | When Emitted |
+|---|---|---|
+| `yield_text()` | `text_delta` | Routing acknowledgment; progress updates; micro-agent streamed text |
+| `yield_tool_start()` | `tool_start` | Before executing any programmatic tool call |
+| `yield_tool_result()` | `tool_result` | After a programmatic tool call completes |
+| `yield_tool_error()` | `tool_error` | If a tool call fails |
+| — | `search_result_added` | When `add_search_result()` is called (flushed from tool pending events) |
+| `yield_done()` | `done` | Pipeline complete — includes full accumulated text |
+| `yield_error()` | `error` | Fatal pipeline error |
+
+`execute_tool_with_events()` is the main tool execution function — it calls
+the tool via `AgentTools`, yields start/result/error events, and flushes any
+pending callback events (like `search_result_added`).
 
 ---
 
 ## Entity Resolution
 
-Many pipelines need to resolve natural-language job references ("the Google
-job", "my Stripe application", "job #5") to a `job_id`. This is a shared
-utility, not a micro-agent:
+`entity_resolution.py` resolves natural-language job references ("the Google
+job", "my Stripe application", "job #5") to a `job_id` using tiered string
+matching:
 
-```python
-def resolve_job_ref(ref: str) -> Job | list[Job] | None:
-    """Resolve a natural-language job reference to a Job record.
+1. **Numeric patterns** — `#5`, `job 5`, `id #5` → direct ID lookup
+2. **Text scoring** — scores all jobs by company and title match:
+   - 100 = exact match, 80 = prefix, 60 = word boundary, 40 = substring
+   - +10 bonus if both company and title match
+3. **Auto-selection** — picks the top match if it scores ≥ 100 (exact) or
+   has a clear gap (≥ 20 points) over the runner-up
+4. **Ambiguity** — returns all matches if scores are too close (pipeline
+   asks user to clarify)
 
-    Strategy:
-    1. If ref is a plain integer or "#N", look up by ID.
-    2. Otherwise, list_jobs(company=ref) and list_jobs(title=ref).
-    3. If exactly 1 match, return it.
-    4. If multiple matches, return all (caller decides: ask user or pick best).
-    5. If no matches, return None.
-    """
-```
-
----
-
-## Profile Context Loading
-
-Several pipelines need the user profile and/or resume. To avoid redundant
-reads within a single request, context is loaded once and passed through:
-
-```python
-@dataclass
-class RequestContext:
-    """Shared context loaded once per user request."""
-    profile: str | None = None           # Raw profile markdown
-    resume: dict | None = None           # Parsed resume JSON
-    jobs: list[dict] | None = None       # Cached job list (if needed)
-
-    def ensure_profile(self):
-        if self.profile is None:
-            self.profile = read_user_profile()["content"]
-
-    def ensure_resume(self):
-        if self.resume is None:
-            self.resume = read_resume()  # may return {"error": ...}
-
-    def ensure_jobs(self, **filters):
-        if self.jobs is None:
-            self.jobs = list_jobs(**filters)["jobs"]
-```
+`resolve_job_ref_or_fail()` wraps this with user-facing error messages for
+pipeline use.
 
 ---
 
-## Proactive Profile Updates
+## Context Caching
 
-The default agent has a rule to proactively update the user's profile when
-they mention job-search-relevant information. In the orchestrator design,
-this is handled as a **post-processing step** after the main pipeline
-completes:
+`RequestContext` (`context.py`) is a per-request dataclass that lazily loads
+and caches shared data to avoid redundant tool calls within a pipeline:
 
-```
-[main pipeline completes]
-    │
-    ▼
-[scan user message for profile-relevant info]
-    │ (lightweight keyword/pattern check, not an LLM call)
-    │
-    ▼ if detected:
-«Profile Update Agent»
-    Input:  user message + current profile
-    Output: section updates (if any)
-    │
-    ▼
-[apply updates silently — no SSE events for this]
-```
-
-This runs at the end so it doesn't delay the main response.
+- `ensure_profile()` — loads the user profile once via `read_user_profile`
+- `ensure_resume()` — loads resume data once via `read_resume`
+- `ensure_jobs(**filters)` — loads the job list once via `list_jobs`
+- `get_resume_summary()` — formats a text summary from parsed resume JSON
+  (name, summary, skills, experience), falling back to first 2000 chars of
+  raw text
 
 ---
 
 ## Error Handling & Fallback
 
 1. **Routing failure** — If the Routing Agent returns an invalid type or
-   fails to parse, fall back to the `general` pipeline.
+   fails param validation after retry, falls back to the `general` pipeline.
 
-2. **Micro-agent failure** — If a micro-agent call fails (timeout, invalid
-   output, rate limit), the pipeline:
-   - Retries once with the error context appended
-   - If still failing, skips that step and continues with degraded output
-   - Reports the issue in the final summary
+2. **Micro-agent failure** — If a structured-output micro-agent call fails
+   (timeout, invalid output, rate limit):
+   - Retries once (non-Ollama providers)
+   - If still failing, the pipeline continues with degraded output or skips
+     that step
 
-3. **Tool failure** — Same as the default agent: the error is captured in
-   `tool_error` SSE events and the pipeline continues if possible.
+3. **Tool failure** — Captured in `tool_error` SSE events via
+   `execute_tool_with_events()`. The pipeline continues if possible.
 
-4. **Full fallback** — If the pipeline dispatcher itself encounters an
-   unrecoverable error, the orchestrator falls back to a single monolithic
-   LLM call (equivalent to the `general` pipeline) to at least give the
-   user some response.
+4. **Full fallback** — If the pipeline itself throws an unrecoverable
+   exception, `FixedPipelineAgent._run_inner()` catches it and falls back
+   to the `general` pipeline to give the user some response.
 
 ---
 
 ## File Structure
 
 ```
-backend/agent/orchestrator/
-    __init__.py              # Exports OrchestratorAgent, OrchestratorOnboardingAgent,
-    │                        #   OrchestratorResumeParser
+backend/agent/fixed_pipeline/
+    __init__.py              # Exports FixedPipelineAgent, reuses DefaultOnboardingAgent
+    │                        #   and DefaultResumeParser from the default design
     DESIGN.md                # This document
     │
     # ── Core machinery ──
-    routing.py               # Routing Agent — classify + extract params
-    dispatcher.py            # Pipeline dispatcher — routes type → pipeline fn
-    context.py               # RequestContext — shared profile/resume/jobs cache
-    entity_resolution.py     # resolve_job_ref() utility
-    streaming.py             # SSE event helpers (yield_text, yield_tool, etc.)
-    │
-    # ── Pipelines ──
-    pipelines/
-        __init__.py
-        find_jobs.py         # find_jobs pipeline
-        research_url.py      # research_url pipeline
-        track_crud.py        # track_crud pipeline (mostly programmatic)
-        query_jobs.py        # query_jobs pipeline
-        todo_mgmt.py         # todo_mgmt pipeline
-        profile_mgmt.py      # profile_mgmt pipeline
-        prepare.py           # prepare pipeline
-        compare.py           # compare pipeline
-        research.py          # research pipeline
-        general.py           # general/fallback pipeline
-        multi_step.py        # multi_step orchestrator
+    agent.py                 # FixedPipelineAgent — main entry point, DSPy context mgmt
+    routing.py               # route() function — invokes RoutingModule, validates params
+    context.py               # RequestContext — lazy-loaded profile/resume/jobs cache
+    entity_resolution.py     # resolve_job_ref() — tiered string matching for job refs
+    streaming.py             # SSE event helpers + execute_tool_with_events()
+    schemas.py               # RoutingResult + per-pipeline param Pydantic schemas
+    prompts.py               # All system prompts for routing + micro-agents
     │
     # ── Micro-agents ──
-    micro_agents/
-        __init__.py
-        base.py              # BaseMicroAgent — shared invoke/stream helpers
-        routing_agent.py     # Routing micro-agent prompt + schema
-        query_generator.py   # Generate search queries
-        evaluator.py         # Rate job fit 0-5
-        detail_extractor.py  # Extract structured job details
-        url_extractor.py     # Find first-party URLs
-        results_summary.py   # Summarize search results
-        fit_evaluator.py     # Deep fit analysis
-        analysis.py          # General analysis (query_jobs, compare)
-        profile_updater.py   # Interpret profile updates
-        todo_generator.py    # Generate application todos
-        interview_prep.py    # Interview preparation content
-        cover_letter.py      # Cover letter drafts
-        resume_tailor.py     # Resume tailoring suggestions
-        question_generator.py # Predict interview questions
-        comparison.py        # Side-by-side job comparison
-        ranking.py           # Score and rank jobs
-        research_synthesizer.py  # Synthesize research findings
-        advisor.py           # General career advice
+    micro_agents.py          # BaseMicroAgent + 18 concrete agent classes
+    │                        #   (7 structured-output, 11 text-streaming)
     │
-    # ── Prompts ──
-    prompts/
-        __init__.py
-        routing.py           # Routing agent system prompt
-        pipelines.py         # Progress/confirmation message templates
-        micro_agents.py      # System prompts for each micro-agent
+    # ── DSPy layer ──
+    dspy_signatures.py       # 8 DSPy Signature definitions (input/output contracts)
+    dspy_modules.py          # 8 DSPy Module classes (ChainOfThought wrappers)
+    dspy_lm.py               # LangChainLM adapter (LangChain BaseChatModel → DSPy BaseLM)
+    module_store.py          # Save/load compiled DSPy modules to dspy_modules/ directory
+    feedback.py              # Training example recording + scoring for optimization
     │
-    # ── Schemas ──
-    schemas/
-        __init__.py
-        routing.py           # RoutingResult, per-pipeline param schemas
-        micro_agents.py      # Output schemas for structured micro-agents
-    │
-    # ── Agent classes (ABCs) ──
-    agent.py                 # OrchestratorAgent — main entry point
-    onboarding_agent.py      # OrchestratorOnboardingAgent (can reuse default design)
-    resume_parser.py         # OrchestratorResumeParser (can reuse default design)
+    # ── Pipelines ──
+    pipeline_base.py         # Pipeline base class + ToolResult container
+    pipelines/
+        __init__.py          # PIPELINE_REGISTRY mapping request types → pipeline classes
+        find_jobs.py         # FindJobsPipeline — query gen → search → evaluate → results
+        research_url.py      # ResearchUrlPipeline — scrape → extract → evaluate → summarize
+        track_crud.py        # TrackCrudPipeline — entity resolve → tool exec → confirm
+        query_jobs.py        # QueryJobsPipeline — list → format or analyze
+        todo_mgmt.py         # TodoMgmtPipeline — CRUD + AI-generated task lists
+        profile_mgmt.py      # ProfileMgmtPipeline — read or NL-interpreted update
+        prepare.py           # PreparePipeline — dispatches to prep-type-specific agents
+        compare.py           # ComparePipeline — compare, rank, or pros/cons
+        research.py          # ResearchPipeline — query gen → web search → synthesize
+        general.py           # GeneralPipeline — fallback advisor with optional context
+        multi_step.py        # MultiStepPipeline — sequential sub-pipeline dispatch
 ```
 
 ---
 
 ## What Stays the Same
 
-- **`AgentTools`** — All existing tools are reused. The orchestrator calls
+- **`AgentTools`** — All existing tools are reused. The fixed pipeline calls
   `tools.execute(name, args)` from pipeline steps rather than letting the
   LLM decide when to call them.
 
-- **`OnboardingAgent`** — The onboarding interview is inherently conversational
-  and doesn't benefit from pipeline routing. The orchestrator can reuse the
-  default design's `DefaultOnboardingAgent` (or implement a new one later).
+- **`OnboardingAgent`** — Reuses `DefaultOnboardingAgent` from the default
+  design. The onboarding interview is inherently conversational and doesn't
+  benefit from pipeline routing.
 
-- **`ResumeParser`** — Single-shot structured extraction. The orchestrator can
-  reuse `DefaultResumeParser`.
+- **`ResumeParser`** — Reuses `DefaultResumeParser` from the default design.
+  Single-shot structured extraction.
 
 - **SSE protocol** — Identical event types and `data` shapes.
 
-- **Frontend** — No changes required. The orchestrator is a drop-in replacement
-  from the frontend's perspective.
-
----
-
-## Implementation Order
-
-Recommended build sequence:
-
-1. **Scaffolding** — `__init__.py`, `agent.py`, `context.py`, `streaming.py`
-   with the `OrchestratorAgent` class that initially falls back to a single
-   LLM call (like `general` pipeline) for everything.
-
-2. **Routing** — `routing.py` + schemas. Once routing works, the agent can
-   classify requests and dispatch to stub pipelines that just echo the
-   classification.
-
-3. **Programmatic pipelines first** — `track_crud`, `query_jobs`, `todo_mgmt`,
-   `profile_mgmt` (simple read). These are mostly DB operations with template
-   responses and prove out the pipeline + SSE infrastructure.
-
-4. **find_jobs** — The flagship pipeline. Build it step by step: query
-   generation → API calls → evaluation → filtering → results.
-
-5. **research_url** — Straightforward scrape + extract + evaluate.
-
-6. **prepare** — Micro-agents for interview prep, cover letters, etc.
-
-7. **compare**, **research**, **general** — Lower priority, can use simpler
-   implementations initially.
-
-8. **multi_step** — Orchestrate sub-pipelines once the individual ones are solid.
+- **Frontend** — No changes required. The fixed pipeline is a drop-in
+  replacement from the frontend's perspective.

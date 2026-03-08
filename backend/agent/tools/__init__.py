@@ -16,6 +16,7 @@ Module layout:
     profile.py          read_user_profile, update_user_profile
     resume.py           read_resume
     search_results.py   add_search_result, list_search_results
+    job_documents.py    save_job_document, get_job_document
 
 Key methods on AgentTools:
     execute(tool_name, arguments) -> dict
@@ -38,6 +39,7 @@ from .profile import ProfileMixin
 from .resume import ResumeMixin
 from .scrape_url import ScrapeUrlMixin
 from .search_results import SearchResultsMixin
+from .job_documents import JobDocumentsMixin
 from .web_search import WebSearchMixin
 
 logger = logging.getLogger(__name__)
@@ -51,6 +53,7 @@ class AgentTools(
     ProfileMixin,
     ResumeMixin,
     SearchResultsMixin,
+    JobDocumentsMixin,
 ):
     """Collection of tools available to agents.
 

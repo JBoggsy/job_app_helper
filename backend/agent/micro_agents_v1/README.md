@@ -166,8 +166,8 @@ doesn't match a specialised workflow lands here, so the agent is never stuck.
 | `add_to_tracker` | `AddToTrackerWorkflow` | Identify referenced search results and promote them to the job tracker |
 | `edit_job` | `EditJobWorkflow` | Identify referenced tracker job, extract field updates, apply them |
 | `remove_jobs` | `RemoveJobsWorkflow` | Identify referenced tracker job(s) and delete them |
-| `scrape_job_posting` | `ScrapeJobPostingWorkflow` | Scrape a URL, extract structured job fields, assess fit |
 | `compare_jobs` | `CompareJobsWorkflow` | Side-by-side comparison of multiple jobs (compensation, fit, pros/cons) |
+| `edit_cover_letter` | `EditCoverLetterWorkflow` | Single-shot critique and revision of a cover letter for a target job (persisted to DB) |
 | `specialize_resume` | `SpecializeResumeWorkflow` | Interactive resume tailoring for a target job |
 | `write_cover_letter` | `WriteCoverLetterWorkflow` | Interactive cover letter writing for a target job |
 | `prep_interview` | `PrepInterviewWorkflow` | Generate tailored interview prep (questions, STAR answers, research topics) |

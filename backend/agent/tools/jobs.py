@@ -217,6 +217,7 @@ class JobsMixin:
         from backend.database import db
         from backend.models.job import Job
         from backend.models.application_todo import ApplicationTodo
+        from backend.models.job_document import JobDocument
 
         job = db.session.get(Job, job_id)
         if not job:
@@ -224,8 +225,9 @@ class JobsMixin:
 
         job_summary = {"id": job.id, "company": job.company, "title": job.title}
 
-        # Delete associated application todos first
+        # Delete associated records first
         ApplicationTodo.query.filter_by(job_id=job_id).delete()
+        JobDocument.query.filter_by(job_id=job_id).delete()
         db.session.delete(job)
         db.session.commit()
 

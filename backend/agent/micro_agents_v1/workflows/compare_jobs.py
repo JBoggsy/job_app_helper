@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from backend.agent.tools import AgentTools
 from backend.llm.llm_factory import LLMConfig
 
+from ._dspy_utils import build_lm
 from .registry import BaseWorkflow, WorkflowResult, register_workflow
 from .resolvers import JobResolver, SearchResultResolver
 
@@ -88,18 +89,6 @@ class CompareJobsSig(dspy.Signature):
 @register_workflow("compare_jobs")
 class CompareJobsWorkflow(BaseWorkflow):
     """Compare multiple jobs or search results side-by-side."""
-
-    def _configure_lm(self) -> dspy.LM:
-        kwargs: dict = {}
-        if self.llm_config.api_key:
-            kwargs["api_key"] = self.llm_config.api_key
-        if self.llm_config.api_base:
-            kwargs["api_base"] = self.llm_config.api_base
-        return dspy.LM(
-            model=self.llm_config.model,
-            max_tokens=self.llm_config.max_tokens,
-            **kwargs,
-        )
 
     def _gather_jobs(
         self, user_message: str, conversation_context: str,
@@ -193,10 +182,9 @@ class CompareJobsWorkflow(BaseWorkflow):
         user_profile = profile_resp.get("content", "")
 
         # 3. Run comparison
-        lm = self._configure_lm()
         comparator = dspy.ChainOfThought(CompareJobsSig)
 
-        with dspy.context(lm=lm):
+        with dspy.context(lm=build_lm(self.llm_config)):
             result = comparator(
                 jobs_data=json.dumps(jobs_to_compare, default=str),
                 user_profile=user_profile,

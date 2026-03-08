@@ -33,6 +33,7 @@ from collections.abc import Generator
 
 import dspy
 
+from ._dspy_utils import build_lm
 from .registry import BaseWorkflow, WorkflowResult, register_workflow
 from .resolvers import JobResolver
 
@@ -202,18 +203,6 @@ class EditCoverLetterWorkflow(BaseWorkflow):
 
     # -- Helpers ------------------------------------------------------------
 
-    def _configure_lm(self) -> dspy.LM:
-        kwargs: dict = {}
-        if self.llm_config.api_key:
-            kwargs["api_key"] = self.llm_config.api_key
-        if self.llm_config.api_base:
-            kwargs["api_base"] = self.llm_config.api_base
-        return dspy.LM(
-            model=self.llm_config.model,
-            max_tokens=self.llm_config.max_tokens,
-            **kwargs,
-        )
-
     def _load_job_context(
         self, user_message: str, conversation_context: str,
     ) -> tuple[dict | None, str]:
@@ -382,7 +371,7 @@ class EditCoverLetterWorkflow(BaseWorkflow):
 
         # 4. Three parallel analysis passes
         yield {"event": "text_delta", "data": {"content": "Analysing your cover letter...\n"}}
-        lm = self._configure_lm()
+        lm = build_lm(self.llm_config)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
             futures: dict[concurrent.futures.Future, str] = {

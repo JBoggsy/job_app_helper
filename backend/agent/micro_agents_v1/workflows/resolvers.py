@@ -28,6 +28,8 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from backend.llm.llm_factory import LLMConfig
 
+from ._dspy_utils import build_lm
+
 logger = logging.getLogger(__name__)
 
 
@@ -86,26 +88,13 @@ class JobResolver(dspy.Module):
         self.llm_config = llm_config
         self.resolver = dspy.ChainOfThought(ResolveJobsSig)
 
-    def _configure_lm(self) -> dspy.LM:
-        kwargs: dict = {}
-        if self.llm_config.api_key:
-            kwargs["api_key"] = self.llm_config.api_key
-        if self.llm_config.api_base:
-            kwargs["api_base"] = self.llm_config.api_base
-        return dspy.LM(
-            model=self.llm_config.model,
-            max_tokens=self.llm_config.max_tokens,
-            **kwargs,
-        )
-
     def forward(
         self,
         user_message: str,
         conversation_context: str,
         jobs: str,
     ) -> dspy.Prediction:
-        lm = self._configure_lm()
-        with dspy.context(lm=lm):
+        with dspy.context(lm=build_lm(self.llm_config)):
             return self.resolver(
                 user_message=user_message,
                 conversation_context=conversation_context,
@@ -202,26 +191,13 @@ class SearchResultResolver(dspy.Module):
         self.llm_config = llm_config
         self.resolver = dspy.ChainOfThought(ResolveSearchResultsSig)
 
-    def _configure_lm(self) -> dspy.LM:
-        kwargs: dict = {}
-        if self.llm_config.api_key:
-            kwargs["api_key"] = self.llm_config.api_key
-        if self.llm_config.api_base:
-            kwargs["api_base"] = self.llm_config.api_base
-        return dspy.LM(
-            model=self.llm_config.model,
-            max_tokens=self.llm_config.max_tokens,
-            **kwargs,
-        )
-
     def forward(
         self,
         user_message: str,
         conversation_context: str,
         search_results: str,
     ) -> dspy.Prediction:
-        lm = self._configure_lm()
-        with dspy.context(lm=lm):
+        with dspy.context(lm=build_lm(self.llm_config)):
             return self.resolver(
                 user_message=user_message,
                 conversation_context=conversation_context,

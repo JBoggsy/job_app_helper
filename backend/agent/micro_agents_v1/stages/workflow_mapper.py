@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from backend.llm.llm_factory import LLMConfig
 
 from .outcome_planner import Outcome
+from ..workflows._dspy_utils import build_lm
 
 logger = logging.getLogger(__name__)
 
@@ -112,20 +113,6 @@ class WorkflowMapper(dspy.Module):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _configure_lm(self) -> dspy.LM:
-        """Build a ``dspy.LM`` from the project's ``LLMConfig``."""
-        kwargs: dict = {}
-        if self.llm_config.api_key:
-            kwargs["api_key"] = self.llm_config.api_key
-        if self.llm_config.api_base:
-            kwargs["api_base"] = self.llm_config.api_base
-
-        return dspy.LM(
-            model=self.llm_config.model,
-            max_tokens=self.llm_config.max_tokens,
-            **kwargs,
-        )
-
     @staticmethod
     def _format_outcomes(outcomes: list[Outcome]) -> str:
         """Serialise outcomes to a JSON string for the LLM."""
@@ -147,9 +134,7 @@ class WorkflowMapper(dspy.Module):
         available_workflows: str,
     ) -> dspy.Prediction:
         """DSPy forward pass — invokes the chain-of-thought mapper."""
-        lm = self._configure_lm()
-
-        with dspy.context(lm=lm):
+        with dspy.context(lm=build_lm(self.llm_config)):
             return self.mapper(
                 user_message=user_message,
                 outcomes=outcomes,

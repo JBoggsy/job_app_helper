@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from backend.agent.tools import AgentTools
 from backend.llm.llm_factory import LLMConfig
 
+from ._dspy_utils import build_lm
 from .registry import BaseWorkflow, WorkflowResult, register_workflow
 
 logger = logging.getLogger(__name__)
@@ -349,25 +350,13 @@ class JobSearchWorkflow(BaseWorkflow):
     #: Override at runtime via ``self.params["eval_batch_size"]``.
     EVAL_BATCH_SIZE: int = 15
 
-    def _configure_lm(self) -> dspy.LM:
-        kwargs: dict = {}
-        if self.llm_config.api_key:
-            kwargs["api_key"] = self.llm_config.api_key
-        if self.llm_config.api_base:
-            kwargs["api_base"] = self.llm_config.api_base
-        return dspy.LM(
-            model=self.llm_config.model,
-            max_tokens=self.llm_config.max_tokens,
-            **kwargs,
-        )
-
     # -- Step 1: Generate search queries --------------------------------
 
     def _generate_queries(
         self, user_request: str, user_profile: str,
     ) -> list[dict]:
         """Use DSPy to produce diverse, expanded search queries."""
-        lm = self._configure_lm()
+        lm = build_lm(self.llm_config)
         generator = dspy.ChainOfThought(GenerateSearchQueriesSig)
 
         with dspy.context(lm=lm):
@@ -491,7 +480,7 @@ class JobSearchWorkflow(BaseWorkflow):
             batch_jobs = jobs[batch_start : batch_start + batch_size]
             batch_trimmed = trimmed[batch_start : batch_start + batch_size]
 
-            lm = self._configure_lm()
+            lm = build_lm(self.llm_config)
             evaluator = dspy.ChainOfThought(EvaluateJobFitSig)
 
             with dspy.context(lm=lm):
@@ -640,7 +629,7 @@ class JobSearchWorkflow(BaseWorkflow):
                     })
 
         # Run DSPy verification to extract direct URLs
-        lm = self._configure_lm()
+        lm = build_lm(self.llm_config)
         verifier = dspy.ChainOfThought(VerifyJobUrlsSig)
 
         with dspy.context(lm=lm):

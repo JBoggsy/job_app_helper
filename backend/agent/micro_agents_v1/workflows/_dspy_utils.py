@@ -7,11 +7,32 @@ interacting with DSPy.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import dspy
 
 from backend.agent.tools import AgentTools
+
+if TYPE_CHECKING:
+    from backend.llm.llm_factory import LLMConfig
+
+
+def build_lm(llm_config: "LLMConfig") -> dspy.LM:
+    """Build a ``dspy.LM`` from the project's ``LLMConfig``.
+
+    Centralised here so every DSPy module and workflow avoids
+    duplicating this construction logic.
+    """
+    kwargs: dict = {}
+    if llm_config.api_key:
+        kwargs["api_key"] = llm_config.api_key
+    if llm_config.api_base:
+        kwargs["api_base"] = llm_config.api_base
+    return dspy.LM(
+        model=llm_config.model,
+        max_tokens=llm_config.max_tokens,
+        **kwargs,
+    )
 
 
 def build_dspy_tools(agent_tools: AgentTools) -> list[dspy.Tool]:

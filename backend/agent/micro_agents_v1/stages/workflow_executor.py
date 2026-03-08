@@ -27,6 +27,7 @@ from backend.agent.tools import AgentTools
 from backend.llm.llm_factory import LLMConfig
 
 from .workflow_mapper import WorkflowAssignment
+from ..workflows._dspy_utils import build_lm
 from ..workflows.registry import WorkflowResult, get_workflow
 
 logger = logging.getLogger(__name__)
@@ -86,24 +87,6 @@ class DeferredParamExtractor(dspy.Module):
         self.extractor = dspy.ChainOfThought(ExtractDeferredParamSig)
 
     # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    def _configure_lm(self) -> dspy.LM:
-        """Build a ``dspy.LM`` from the project's ``LLMConfig``."""
-        kwargs: dict = {}
-        if self.llm_config.api_key:
-            kwargs["api_key"] = self.llm_config.api_key
-        if self.llm_config.api_base:
-            kwargs["api_base"] = self.llm_config.api_base
-
-        return dspy.LM(
-            model=self.llm_config.model,
-            max_tokens=self.llm_config.max_tokens,
-            **kwargs,
-        )
-
-    # ------------------------------------------------------------------
     # DSPy forward
     # ------------------------------------------------------------------
 
@@ -113,8 +96,7 @@ class DeferredParamExtractor(dspy.Module):
         param_context: str,
         dependency_results: str,
     ) -> dspy.Prediction:
-        lm = self._configure_lm()
-        with dspy.context(lm=lm):
+        with dspy.context(lm=build_lm(self.llm_config)):
             return self.extractor(
                 param_name=param_name,
                 param_context=param_context,

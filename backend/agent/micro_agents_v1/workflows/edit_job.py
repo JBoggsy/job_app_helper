@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from backend.agent.tools import AgentTools
 from backend.llm.llm_factory import LLMConfig
 
+from ._dspy_utils import build_lm
 from .registry import BaseWorkflow, WorkflowResult, register_workflow
 from .resolvers import JobResolver
 
@@ -94,18 +95,6 @@ _INT_FIELDS = {"salary_min", "salary_max", "job_fit"}
 class EditJobWorkflow(BaseWorkflow):
     """Identify referenced job, extract field updates, and apply them."""
 
-    def _configure_lm(self) -> dspy.LM:
-        kwargs: dict = {}
-        if self.llm_config.api_key:
-            kwargs["api_key"] = self.llm_config.api_key
-        if self.llm_config.api_base:
-            kwargs["api_base"] = self.llm_config.api_base
-        return dspy.LM(
-            model=self.llm_config.model,
-            max_tokens=self.llm_config.max_tokens,
-            **kwargs,
-        )
-
     def run(self) -> Generator[dict, None, WorkflowResult]:
         user_message = self.outcome_description or self.params.get("user_message", "")
         conversation_context = self.params.get("conversation_context", "")
@@ -158,10 +147,9 @@ class EditJobWorkflow(BaseWorkflow):
         }
 
         # 2. Extract field updates
-        lm = self._configure_lm()
         extractor = dspy.ChainOfThought(ExtractJobEditsSig)
 
-        with dspy.context(lm=lm):
+        with dspy.context(lm=build_lm(self.llm_config)):
             result = extractor(
                 user_message=user_message,
                 current_job=json.dumps(job, default=str),

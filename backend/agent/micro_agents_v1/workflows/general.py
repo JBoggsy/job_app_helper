@@ -20,7 +20,7 @@ import dspy
 from backend.agent.tools import AgentTools
 from backend.llm.llm_factory import LLMConfig
 
-from ._dspy_utils import build_dspy_tools
+from ._dspy_utils import build_dspy_tools, build_lm
 from .registry import BaseWorkflow, WorkflowResult, register_workflow
 
 logger = logging.getLogger(__name__)
@@ -80,24 +80,6 @@ class GeneralWorkflow(BaseWorkflow):
         )
 
     # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    def _configure_lm(self) -> dspy.LM:
-        """Build a ``dspy.LM`` from the project's ``LLMConfig``."""
-        kwargs: dict = {}
-        if self.llm_config.api_key:
-            kwargs["api_key"] = self.llm_config.api_key
-        if self.llm_config.api_base:
-            kwargs["api_base"] = self.llm_config.api_base
-
-        return dspy.LM(
-            model=self.llm_config.model,
-            max_tokens=self.llm_config.max_tokens,
-            **kwargs,
-        )
-
-    # ------------------------------------------------------------------
     # Run
     # ------------------------------------------------------------------
 
@@ -115,10 +97,8 @@ class GeneralWorkflow(BaseWorkflow):
                 f"{k}={v}" for k, v in self.params.items()
             )
 
-        lm = self._configure_lm()
-
         try:
-            with dspy.context(lm=lm):
+            with dspy.context(lm=build_lm(self.llm_config)):
                 prediction = self._react(task=task, context=context)
 
             answer = prediction.answer

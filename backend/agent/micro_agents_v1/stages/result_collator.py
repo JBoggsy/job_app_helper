@@ -18,6 +18,7 @@ import dspy
 
 from backend.llm.llm_factory import LLMConfig
 
+from ..workflows._dspy_utils import build_lm
 from ..workflows.registry import WorkflowResult
 
 logger = logging.getLogger(__name__)
@@ -76,20 +77,6 @@ class ResultCollator(dspy.Module):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _configure_lm(self) -> dspy.LM:
-        """Build a ``dspy.LM`` from the project's ``LLMConfig``."""
-        kwargs: dict = {}
-        if self.llm_config.api_key:
-            kwargs["api_key"] = self.llm_config.api_key
-        if self.llm_config.api_base:
-            kwargs["api_base"] = self.llm_config.api_base
-
-        return dspy.LM(
-            model=self.llm_config.model,
-            max_tokens=self.llm_config.max_tokens,
-            **kwargs,
-        )
-
     @staticmethod
     def _format_results(results: list[WorkflowResult]) -> str:
         """Serialise workflow results to a JSON string for the LLM."""
@@ -116,9 +103,7 @@ class ResultCollator(dspy.Module):
         workflow_results: str,
     ) -> dspy.Prediction:
         """DSPy forward pass — invokes the chain-of-thought collator."""
-        lm = self._configure_lm()
-
-        with dspy.context(lm=lm):
+        with dspy.context(lm=build_lm(self.llm_config)):
             return self.collator(
                 user_message=user_message,
                 workflow_results=workflow_results,

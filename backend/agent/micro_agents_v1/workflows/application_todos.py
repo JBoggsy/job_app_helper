@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from backend.agent.tools import AgentTools
 from backend.llm.llm_factory import LLMConfig
 
+from ._dspy_utils import build_lm
 from .registry import BaseWorkflow, WorkflowResult, register_workflow
 from .resolvers import JobResolver
 
@@ -157,18 +158,6 @@ class ExtractTodoActionsSig(dspy.Signature):
 class ApplicationTodosWorkflow(BaseWorkflow):
     """Manage application task lists for a specific job."""
 
-    def _configure_lm(self) -> dspy.LM:
-        kwargs: dict = {}
-        if self.llm_config.api_key:
-            kwargs["api_key"] = self.llm_config.api_key
-        if self.llm_config.api_base:
-            kwargs["api_base"] = self.llm_config.api_base
-        return dspy.LM(
-            model=self.llm_config.model,
-            max_tokens=self.llm_config.max_tokens,
-            **kwargs,
-        )
-
     def _resolve_job(self, user_message: str, conversation_context: str) -> Generator[dict, None, dict | None]:
         """Resolve the target job, yielding progress events. Returns job dict or None."""
         # Check if job_id was provided directly in params
@@ -225,7 +214,7 @@ class ApplicationTodosWorkflow(BaseWorkflow):
 
     def _classify_intent(self, user_message: str, job: dict, todos: list[dict]) -> str:
         """Classify the user's intent regarding todos."""
-        lm = self._configure_lm()
+        lm = build_lm(self.llm_config)
         classifier = dspy.ChainOfThought(ClassifyTodoIntentSig)
 
         with dspy.context(lm=lm):
@@ -261,7 +250,7 @@ class ApplicationTodosWorkflow(BaseWorkflow):
             default=str,
         )
 
-        lm = self._configure_lm()
+        lm = build_lm(self.llm_config)
         generator = dspy.ChainOfThought(GenerateTodosSig)
 
         with dspy.context(lm=lm):
@@ -302,7 +291,7 @@ class ApplicationTodosWorkflow(BaseWorkflow):
         self, job: dict, user_message: str, todos: list[dict],
     ) -> Generator[dict, None, list[dict]]:
         """Extract and execute specific todo actions from the user message."""
-        lm = self._configure_lm()
+        lm = build_lm(self.llm_config)
         extractor = dspy.ChainOfThought(ExtractTodoActionsSig)
 
         with dspy.context(lm=lm):

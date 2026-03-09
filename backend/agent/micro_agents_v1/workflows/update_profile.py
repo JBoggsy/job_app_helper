@@ -19,26 +19,13 @@ from typing import Optional
 import dspy
 from pydantic import BaseModel, Field
 
-from backend.agent.tools import AgentTools
+from backend.agent.user_profile import PROFILE_SECTIONS
 from backend.llm.llm_factory import LLMConfig
 
 from ._dspy_utils import build_lm
 from .registry import BaseWorkflow, WorkflowResult, register_workflow
 
 logger = logging.getLogger(__name__)
-
-PROFILE_SECTIONS = [
-    "Summary",
-    "Education",
-    "Work Experience",
-    "Skills & Expertise",
-    "Fields of Interest",
-    "Salary Preferences",
-    "Location Preferences",
-    "Remote Work Preferences",
-    "Job Search Goals",
-    "Other Notes",
-]
 
 
 # ---------------------------------------------------------------------------

@@ -33,9 +33,8 @@ from collections.abc import Generator
 
 import dspy
 
-from ._dspy_utils import build_lm
+from ._dspy_utils import build_lm, load_job_context, load_user_context
 from .registry import BaseWorkflow, WorkflowResult, register_workflow
-from .resolvers import JobResolver
 
 logger = logging.getLogger(__name__)
 
@@ -202,75 +201,7 @@ class EditCoverLetterWorkflow(BaseWorkflow):
     """Single-shot cover letter critique and revision."""
 
     # -- Helpers ------------------------------------------------------------
-
-    def _load_job_context(
-        self, user_message: str, conversation_context: str,
-    ) -> tuple[dict | None, str]:
-        """Resolve the target job and build a context string for prompts.
-
-        Returns ``(job_dict, job_context_string)``.  Both are empty/None if
-        no job can be matched.
-        """
-        job_id = self.params.get("job_id")
-        job: dict | None = None
-
-        jobs_resp = self.tools.execute("list_jobs", {"limit": 50})
-        tracker_jobs = jobs_resp.get("jobs", []) if "error" not in jobs_resp else []
-
-        if job_id and tracker_jobs:
-            for j in tracker_jobs:
-                if j["id"] == int(job_id):
-                    job = j
-                    break
-
-        if job is None and tracker_jobs:
-            resolver = JobResolver(self.llm_config)
-            resolved = resolver.resolve(
-                user_message=user_message,
-                jobs=tracker_jobs,
-                conversation_context=conversation_context,
-                min_confidence=0.3,
-            )
-            if resolved:
-                matched_id = resolved[0].job_id
-                for j in tracker_jobs:
-                    if j["id"] == matched_id:
-                        job = j
-                        break
-
-        if job is None:
-            return None, ""
-
-        parts = [f"Role: {job['title']} at {job['company']}"]
-        if job.get("location"):
-            parts.append(f"Location: {job['location']}")
-        if job.get("remote_type"):
-            parts.append(f"Remote: {job['remote_type']}")
-        if job.get("requirements"):
-            parts.append(f"Requirements:\n{job['requirements']}")
-        if job.get("nice_to_haves"):
-            parts.append(f"Nice to haves:\n{job['nice_to_haves']}")
-
-        return job, "\n".join(parts)
-
-    def _load_user_context(self) -> str:
-        """Load profile and resume into a single context string for prompts."""
-        parts: list[str] = []
-
-        profile_resp = self.tools.execute("read_user_profile", {})
-        if profile := profile_resp.get("content", ""):
-            parts.append(f"## User Profile\n{profile}")
-
-        resume_resp = self.tools.execute("read_resume", {})
-        if "error" not in resume_resp:
-            if parsed := resume_resp.get("parsed"):
-                parts.append(
-                    f"## Resume (parsed)\n{json.dumps(parsed, default=str)[:3000]}"
-                )
-            elif text := resume_resp.get("text"):
-                parts.append(f"## Resume\n{text[:3000]}")
-
-        return "\n\n".join(parts)
+    # Job/user context loading delegated to shared helpers in _dspy_utils.py.
 
     # -- Analysis passes (synchronous, safe for thread pool) ----------------
 
@@ -325,7 +256,10 @@ class EditCoverLetterWorkflow(BaseWorkflow):
         cover_letter = self.params.get("cover_letter", "")
 
         # 1. Resolve the target job (required)
-        job, job_context = self._load_job_context(user_message, conversation_context)
+        job, job_context = load_job_context(
+            self.tools, self.params, self.llm_config,
+            user_message, conversation_context,
+        )
         if not job:
             msg = "I need to know which job this cover letter is for. Please specify the job.\n"
             yield {"event": "text_delta", "data": {"content": msg}}
@@ -367,7 +301,7 @@ class EditCoverLetterWorkflow(BaseWorkflow):
             )
 
         # 3. Load user context (profile + resume)
-        user_context = self._load_user_context()
+        user_context = load_user_context(self.tools)
 
         # 4. Three parallel analysis passes
         yield {"event": "text_delta", "data": {"content": "Analysing your cover letter...\n"}}

@@ -8,40 +8,44 @@ import re
 
 from backend.data_dir import get_data_dir
 
-DEFAULT_PROFILE_TEMPLATE = """---
+# Canonical placeholder used for every unfilled profile section.
+# All template defaults and detection logic reference this single constant.
+SECTION_PLACEHOLDER = "_Not yet provided_"
+
+DEFAULT_PROFILE_TEMPLATE = f"""---
 onboarded: false
 ---
 # User Profile
 
 ## Summary
-_No summary yet. The AI assistant will fill this in as it learns about you._
+{SECTION_PLACEHOLDER}
 
 ## Education
-- _Not yet provided_
+{SECTION_PLACEHOLDER}
 
 ## Work Experience
-- _Not yet provided_
+{SECTION_PLACEHOLDER}
 
 ## Skills & Expertise
-- _Not yet provided_
+{SECTION_PLACEHOLDER}
 
 ## Fields of Interest
-- _Not yet provided_
+{SECTION_PLACEHOLDER}
 
 ## Salary Preferences
-- _Not yet provided_
+{SECTION_PLACEHOLDER}
 
 ## Location Preferences
-- _Not yet provided_
+{SECTION_PLACEHOLDER}
 
 ## Remote Work Preferences
-- _Not yet provided_
+{SECTION_PLACEHOLDER}
 
 ## Job Search Goals
-- _Not yet provided_
+{SECTION_PLACEHOLDER}
 
 ## Other Notes
-- _None yet_
+{SECTION_PLACEHOLDER}
 """
 
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
@@ -58,6 +62,34 @@ PROFILE_SECTIONS = [
     "Job Search Goals",
     "Other Notes",
 ]
+
+
+# Legacy placeholder strings from older profile templates.  Kept here so
+# ``is_section_unfilled`` recognises profiles created before the canonical
+# placeholder was standardised.
+_LEGACY_PLACEHOLDERS = frozenset({
+    "no summary yet",
+    "no summary yet. the ai assistant will fill this in as it learns about you.",
+    "none yet",
+})
+
+
+def is_section_unfilled(content: str) -> bool:
+    """Return True if *content* is empty or matches the canonical placeholder.
+
+    Strips leading markdown list markers (``- ``), whitespace, and
+    underscore emphasis before comparing so that both ``_Not yet provided_``
+    and ``- _Not yet provided_`` are detected.  Also recognises legacy
+    placeholder strings from older profile templates.
+    """
+    if not content:
+        return True
+    stripped = content.strip().lstrip("- ").strip().strip("_").strip()
+    normalised = stripped.lower()
+    placeholder_core = SECTION_PLACEHOLDER.strip("_").strip().lower()
+    if normalised == placeholder_core:
+        return True
+    return normalised in _LEGACY_PLACEHOLDERS
 
 _SECTION_RE_TEMPLATE = r"^## {name}\n(.*?)(?=^## |\Z)"
 

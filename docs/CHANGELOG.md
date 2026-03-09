@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **EventBus SSE migration** — Replaced ad-hoc SSE streaming (`yield` statements, `_pending_events` buffers, `event_callback` callbacks) with a unified `EventBus` pattern. All SSE events now flow through a thread-safe queue. Agent `run()` methods spawn worker threads and drain the bus. `AgentTools.execute()` auto-emits `tool_start`/`tool_result`/`tool_error` events. Workflow `run()` methods converted from generators to plain methods returning `WorkflowResult`. Deleted `run_dspy_module_streaming()`. Net ~165 lines removed.
+
 ## [0.11.0] - 2026-03-09
 
 ### Added

@@ -7,12 +7,14 @@ marker to signal that the interview is finished.
 
 import json
 import logging
+import threading
 import uuid
 from collections.abc import Generator
 
 import litellm
 
 from backend.agent.base import OnboardingAgent
+from backend.agent.event_bus import EventBus
 from backend.agent.tools import AgentTools
 from backend.agent.user_profile import set_onboarded
 from backend.llm.llm_factory import LLMConfig
@@ -24,25 +26,18 @@ logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 15
 
-# Onboarding only needs profile + resume tools, but we bind all tools and
-# let the system prompt guide usage.  Keeping it simple avoids maintaining
-# a separate tool-subset list.
-
 
 class DefaultOnboardingAgent(OnboardingAgent):
     """Onboarding interview agent — monolithic ReAct loop."""
 
     def __init__(self, llm_config: LLMConfig):
         self.llm_config = llm_config
-        self._pending_events: list[dict] = []
+        self.event_bus = EventBus()
 
         self.tools = AgentTools(
-            event_callback=self._on_tool_event,
+            event_bus=self.event_bus,
         )
         self.openai_tools = _build_openai_tools(self.tools)
-
-    def _on_tool_event(self, event: dict):
-        self._pending_events.append(event)
 
     def _completion_kwargs(self) -> dict:
         """Build kwargs for litellm.completion()."""
@@ -60,6 +55,34 @@ class DefaultOnboardingAgent(OnboardingAgent):
         return kwargs
 
     def run(self, messages: list[dict]) -> Generator[dict, None, None]:
+        from flask import current_app
+        app = current_app._get_current_object()
+
+        thread = threading.Thread(
+            target=self._worker, args=(app, messages), daemon=True
+        )
+        thread.start()
+        yield from self.event_bus.drain_blocking()
+        thread.join()
+
+    def _worker(self, app, messages):
+        with app.app_context():
+            try:
+                full_text = self._react_loop(messages)
+
+                # Check for onboarding completion marker
+                if "[ONBOARDING_COMPLETE]" in full_text:
+                    set_onboarded(True)
+                    self.event_bus.emit("onboarding_complete", {})
+
+                self.event_bus.emit("done", {"content": full_text})
+            except Exception as exc:
+                logger.exception("DefaultOnboardingAgent error")
+                self.event_bus.emit("error", {"message": str(exc)})
+            finally:
+                self.event_bus.close()
+
+    def _react_loop(self, messages):
         llm_messages: list[dict] = [{"role": "system", "content": ONBOARDING_SYSTEM_PROMPT}]
         for msg in messages:
             if msg["role"] == "user":
@@ -84,17 +107,12 @@ class DefaultOnboardingAgent(OnboardingAgent):
 
                     if delta.content:
                         collected_content += delta.content
-                        yield {"event": "text_delta", "data": {"content": delta.content}}
+                        self.event_bus.emit("text_delta", {"content": delta.content})
 
                     if delta.tool_calls:
                         _accumulate_tool_calls(tool_call_chunks, delta.tool_calls)
 
                 full_text += collected_content
-
-                # Check for onboarding completion marker
-                if "[ONBOARDING_COMPLETE]" in full_text:
-                    set_onboarded(True)
-                    yield {"event": "onboarding_complete", "data": {}}
 
                 # Build completed tool calls from accumulated fragments
                 tool_calls = []
@@ -136,29 +154,9 @@ class DefaultOnboardingAgent(OnboardingAgent):
                     "tool_calls": assistant_tool_calls,
                 })
 
-                # Execute each tool call
+                # Execute each tool call — events are auto-emitted by execute()
                 for tc in tool_calls:
-                    yield {
-                        "event": "tool_start",
-                        "data": {"id": tc["id"], "name": tc["name"], "arguments": tc["args"]},
-                    }
-
                     result = self.tools.execute(tc["name"], tc["args"])
-
-                    for pending in self._pending_events:
-                        yield pending
-                    self._pending_events.clear()
-
-                    if "error" in result:
-                        yield {
-                            "event": "tool_error",
-                            "data": {"id": tc["id"], "name": tc["name"], "error": result["error"]},
-                        }
-                    else:
-                        yield {
-                            "event": "tool_result",
-                            "data": {"id": tc["id"], "name": tc["name"], "result": result},
-                        }
 
                     llm_messages.append({
                         "role": "tool",
@@ -172,9 +170,8 @@ class DefaultOnboardingAgent(OnboardingAgent):
                     full_text += collected_content
 
                 if _iteration >= MAX_ITERATIONS - 1:
-                    yield {"event": "error", "data": {"message": str(exc)}}
-                    return
+                    raise
                 logger.info("Retrying after error on iteration %d", _iteration)
                 continue
 
-        yield {"event": "done", "data": {"content": full_text}}
+        return full_text

@@ -19,11 +19,11 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Generator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from backend.agent.event_bus import EventBus
     from backend.agent.tools import AgentTools
     from backend.llm.llm_factory import LLMConfig
 
@@ -53,9 +53,10 @@ class WorkflowResult:
 class BaseWorkflow(ABC):
     """Interface that all workflows must satisfy.
 
-    Subclasses implement ``run()`` as a generator that yields SSE event
-    dicts and returns a ``WorkflowResult`` via ``StopIteration.value``
-    (i.e. callers use ``result = yield from workflow.run()``).
+    Subclasses implement ``run()`` as a plain method that returns a
+    ``WorkflowResult``.  Use ``self.event_bus.emit()`` to stream
+    progress events (text_delta, etc.) to the user.  Tool events are
+    auto-emitted by ``AgentTools.execute()``.
     """
 
     def __init__(
@@ -65,16 +66,23 @@ class BaseWorkflow(ABC):
         tools: "AgentTools",
         llm_config: "LLMConfig",
         outcome_description: str = "",
+        event_bus: "EventBus | None" = None,
     ):
         self.outcome_id = outcome_id
         self.params = params
         self.tools = tools
         self.llm_config = llm_config
         self.outcome_description = outcome_description
+        self.event_bus = event_bus
 
     @abstractmethod
-    def run(self) -> Generator[dict, None, WorkflowResult]:
-        """Execute the workflow, yielding SSE events and returning a result."""
+    def run(self) -> WorkflowResult:
+        """Execute the workflow and return a result.
+
+        Use self.event_bus.emit() to stream progress events (text_delta,
+        thinking, etc.) to the user. Tool events are auto-emitted by
+        AgentTools.execute().
+        """
         ...
 
 

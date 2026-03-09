@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Generator
 from graphlib import TopologicalSorter
 
 import dspy
 
+from backend.agent.event_bus import EventBus
 from backend.agent.tools import AgentTools
 from backend.llm.llm_factory import LLMConfig
 
@@ -174,6 +174,10 @@ class _CachedTools:
     is ``(tool_name, sorted_args_tuple)``; mutating tools (``create_job``,
     ``edit_job``, ``update_user_profile``, etc.) pass through and
     invalidate the cache for any tool whose results they may have changed.
+
+    Cache hits return directly without emitting events — this is the
+    desired behaviour (read-only tools don't need to show in the UI
+    every time they're called from a cache).
     """
 
     # Tools that mutate job data → invalidate list_jobs cache
@@ -233,9 +237,11 @@ class WorkflowExecutor:
     the registry, and collects results.
     """
 
-    def __init__(self, tools: AgentTools, llm_config: LLMConfig):
+    def __init__(self, tools: AgentTools, llm_config: LLMConfig,
+                 event_bus: EventBus | None = None):
         self.tools = tools
         self.llm_config = llm_config
+        self.event_bus = event_bus
         self.param_extractor = DeferredParamExtractor(llm_config)
 
     # ------------------------------------------------------------------
@@ -335,13 +341,11 @@ class WorkflowExecutor:
     def execute(
         self,
         assignments: list[WorkflowAssignment],
-    ) -> Generator[dict, None, list[WorkflowResult]]:
+    ) -> list[WorkflowResult]:
         """Execute all workflow assignments in dependency order.
 
-        Yields SSE event dicts during execution.  The final list of
-        :class:`WorkflowResult` objects is returned via
-        ``StopIteration.value`` (callers use
-        ``results = yield from executor.execute(...)``).
+        Returns the list of WorkflowResult objects directly.
+        Emits progress events to the event bus.
         """
         ordered = self._topological_order(assignments)
         completed: dict[int, WorkflowResult] = {}
@@ -373,10 +377,9 @@ class WorkflowExecutor:
             if len(ordered) > 1:
                 step_idx = ordered.index(assignment) + 1
                 step_label = f"Step {step_idx}/{len(ordered)}: {step_label}"
-            yield {
-                "event": "text_delta",
-                "data": {"content": f"**{step_label}**\n\n"},
-            }
+            if self.event_bus:
+                self.event_bus.emit("text_delta",
+                    {"content": f"**{step_label}**\n\n"})
 
             # Resolve deferred parameters using upstream results
             if assignment.deferred_params:
@@ -416,19 +419,20 @@ class WorkflowExecutor:
                 tools=cached_tools,
                 llm_config=self.llm_config,
                 outcome_description=assignment.outcome.description,
+                event_bus=self.event_bus,
             )
 
-            # Execute — the workflow is a generator that yields SSE events
-            # and returns a WorkflowResult via StopIteration.value
+            # Execute — plain method call
             try:
-                result = yield from workflow.run()
+                result = workflow.run()
             except NotImplementedError:
                 logger.warning(
                     "Workflow %r for outcome %d is not yet implemented",
                     wf_name, outcome_id,
                 )
                 msg = f"The `{wf_name}` workflow is not yet implemented.\n"
-                yield {"event": "text_delta", "data": {"content": msg}}
+                if self.event_bus:
+                    self.event_bus.emit("text_delta", {"content": msg})
                 result = WorkflowResult(
                     outcome_id=outcome_id,
                     success=False,

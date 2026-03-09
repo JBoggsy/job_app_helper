@@ -23,7 +23,6 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import Generator
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -398,7 +397,7 @@ class JobSearchWorkflow(BaseWorkflow):
 
     def _execute_queries(
         self, queries: list[dict],
-    ) -> Generator[dict, None, list[dict]]:
+    ) -> list[dict]:
         """Run each query via the job_search tool, collecting raw results."""
         all_results: list[dict] = []
 
@@ -407,23 +406,17 @@ class JobSearchWorkflow(BaseWorkflow):
             if i > 1:
                 time.sleep(1)
 
-            yield {
-                "event": "text_delta",
-                "data": {
-                    "content": f"  Running query {i}/{len(queries)}: "
-                    f"\"{q['query']}\""
-                    + (f" in {q['location']}" if q.get("location") else "")
-                    + "...\n",
-                },
-            }
+            self.event_bus.emit("text_delta", {
+                "content": f"  Running query {i}/{len(queries)}: "
+                f"\"{q['query']}\""
+                + (f" in {q['location']}" if q.get("location") else "")
+                + "...\n",
+            })
 
             resp = self.tools.execute("job_search", q)
             if "error" in resp:
                 logger.warning("job_search query failed: %s", resp["error"])
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": f"    (query failed: {resp['error']})\n"},
-                }
+                self.event_bus.emit("text_delta", {"content": f"    (query failed: {resp['error']})\n"})
                 continue
 
             results = resp.get("results", [])
@@ -463,15 +456,12 @@ class JobSearchWorkflow(BaseWorkflow):
 
     def _evaluate_and_filter(
         self, jobs: list[dict], user_profile: str, user_request: str,
-    ) -> Generator[dict, None, list[dict]]:
+    ) -> list[dict]:
         """Score each job and filter out those below the threshold."""
         if not jobs:
             return []
 
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"Evaluating fit for {len(jobs)} unique results...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"Evaluating fit for {len(jobs)} unique results...\n"})
 
         # Build a trimmed version for the LLM (avoid huge payloads)
         trimmed = []
@@ -519,12 +509,9 @@ class JobSearchWorkflow(BaseWorkflow):
                         "_fit_reason": score_entry.fit_reason,
                     })
 
-        yield {
-            "event": "text_delta",
-            "data": {
-                "content": f"  {len(scored_jobs)} of {len(jobs)} jobs scored 3+ stars.\n",
-            },
-        }
+        self.event_bus.emit("text_delta", {
+            "content": f"  {len(scored_jobs)} of {len(jobs)} jobs scored 3+ stars.\n",
+        })
 
         return scored_jobs
 
@@ -532,16 +519,13 @@ class JobSearchWorkflow(BaseWorkflow):
 
     def _liveness_check(
         self, jobs: list[dict],
-    ) -> Generator[dict, None, tuple[list[dict], int]]:
+    ) -> tuple[list[dict], int]:
         """Tier 1: lightweight HTTP liveness check for ALL URLs.
 
         Returns ``(surviving_jobs, dead_count)``.  This uses direct HTTP
         requests (no Tavily API cost).
         """
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"  Checking liveness of {len(jobs)} URL(s)...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"  Checking liveness of {len(jobs)} URL(s)...\n"})
 
         alive: list[dict] = []
         dead_count = 0
@@ -564,18 +548,15 @@ class JobSearchWorkflow(BaseWorkflow):
                 )
 
         if dead_count:
-            yield {
-                "event": "text_delta",
-                "data": {
-                    "content": f"  Filtered {dead_count} dead/unreachable URL(s).\n",
-                },
-            }
+            self.event_bus.emit("text_delta", {
+                "content": f"  Filtered {dead_count} dead/unreachable URL(s).\n",
+            })
 
         return alive, dead_count
 
     def _resolve_aggregator_urls(
         self, jobs: list[dict],
-    ) -> Generator[dict, None, list[dict]]:
+    ) -> list[dict]:
         """Tier 2: for jobs on aggregator domains, use Tavily scrape +
         web search to find direct employer posting URLs.
 
@@ -590,15 +571,12 @@ class JobSearchWorkflow(BaseWorkflow):
         if not aggregator_indices:
             return jobs
 
-        yield {
-            "event": "text_delta",
-            "data": {
-                "content": (
-                    f"  Resolving direct URLs for {len(aggregator_indices)} "
-                    f"aggregator link(s)...\n"
-                ),
-            },
-        }
+        self.event_bus.emit("text_delta", {
+            "content": (
+                f"  Resolving direct URLs for {len(aggregator_indices)} "
+                f"aggregator link(s)...\n"
+            ),
+        })
 
         # Scrape aggregator pages for direct links
         jobs_for_verification: list[dict] = []
@@ -683,16 +661,13 @@ class JobSearchWorkflow(BaseWorkflow):
         if dead_indices:
             parts.append(f"removed {len(dead_indices)} dead listing(s)")
         if parts:
-            yield {
-                "event": "text_delta",
-                "data": {"content": f"  {'; '.join(parts).capitalize()}.\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": f"  {'; '.join(parts).capitalize()}.\n"})
 
         return verified
 
     def _verify_urls(
         self, jobs: list[dict],
-    ) -> Generator[dict, None, list[dict]]:
+    ) -> list[dict]:
         """Two-tier URL verification.
 
         Tier 1 (all URLs, free): lightweight HTTP GET to detect dead
@@ -706,12 +681,12 @@ class JobSearchWorkflow(BaseWorkflow):
             return []
 
         # Tier 1: liveness check (free HTTP requests)
-        alive, dead_count = yield from self._liveness_check(jobs)
+        alive, dead_count = self._liveness_check(jobs)
         if not alive:
             return []
 
         # Tier 2: resolve aggregator URLs (uses Tavily for scraping)
-        verified = yield from self._resolve_aggregator_urls(alive)
+        verified = self._resolve_aggregator_urls(alive)
 
         return verified
 
@@ -761,29 +736,23 @@ class JobSearchWorkflow(BaseWorkflow):
 
     # -- Main run -------------------------------------------------------
 
-    def run(self) -> Generator[dict, None, WorkflowResult]:
+    def run(self) -> WorkflowResult:
         user_request = self.outcome_description or self.params.get("user_message", "")
 
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"Searching for jobs: *{user_request}*\n\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"Searching for jobs: *{user_request}*\n\n"})
 
         # Load user profile
         profile_resp = self.tools.execute("read_user_profile", {})
         user_profile = profile_resp.get("content", "")
 
         # 1. Generate diverse search queries
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Generating search queries...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Generating search queries...\n"})
         try:
             queries = self._generate_queries(user_request, user_profile)
         except Exception as e:
             logger.exception("Failed to generate search queries")
             msg = f"Failed to generate search queries: {e}\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -793,7 +762,7 @@ class JobSearchWorkflow(BaseWorkflow):
 
         if not queries:
             msg = "Could not generate any search queries from the request.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -801,16 +770,13 @@ class JobSearchWorkflow(BaseWorkflow):
                 summary=msg.strip(),
             )
 
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"Generated {len(queries)} search queries.\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"Generated {len(queries)} search queries.\n"})
 
         # 2. Execute queries
-        raw_results = yield from self._execute_queries(queries)
+        raw_results = self._execute_queries(queries)
         if not raw_results:
             msg = "No results found from any search query.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -818,22 +784,16 @@ class JobSearchWorkflow(BaseWorkflow):
                 summary=msg.strip(),
             )
 
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"\nCollected {len(raw_results)} raw results.\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"\nCollected {len(raw_results)} raw results.\n"})
 
         # 3. Deduplicate
         unique_results = self._deduplicate(raw_results)
-        yield {
-            "event": "text_delta",
-            "data": {
-                "content": f"After deduplication: {len(unique_results)} unique jobs.\n\n",
-            },
-        }
+        self.event_bus.emit("text_delta", {
+            "content": f"After deduplication: {len(unique_results)} unique jobs.\n\n",
+        })
 
         # 4-5. Evaluate fit and filter
-        qualifying = yield from self._evaluate_and_filter(
+        qualifying = self._evaluate_and_filter(
             unique_results, user_profile, user_request,
         )
 
@@ -842,7 +802,7 @@ class JobSearchWorkflow(BaseWorkflow):
                 "None of the results scored 3+ stars for your profile. "
                 "Try broadening your search criteria.\n"
             )
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -851,15 +811,12 @@ class JobSearchWorkflow(BaseWorkflow):
             )
 
         # 6. Verify/fix URLs
-        yield {
-            "event": "text_delta",
-            "data": {"content": "\nVerifying job listing URLs...\n"},
-        }
-        verified = yield from self._verify_urls(qualifying)
+        self.event_bus.emit("text_delta", {"content": "\nVerifying job listing URLs...\n"})
+        verified = self._verify_urls(qualifying)
 
         if not verified:
             msg = "All qualifying listings appear to be closed or dead.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -868,20 +825,14 @@ class JobSearchWorkflow(BaseWorkflow):
             )
 
         # 7. Add as search results
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"\nAdding {len(verified)} job(s) to search results...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"\nAdding {len(verified)} job(s) to search results...\n"})
         added_count = self._add_search_results(verified)
 
         summary = (
             f"Found {added_count} qualifying job(s) from "
             f"{len(unique_results)} total results."
         )
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"\n{summary}\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"\n{summary}\n"})
 
         return WorkflowResult(
             outcome_id=self.outcome_id,

@@ -13,7 +13,6 @@ Pipeline:
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator
 
 from backend.agent.tools import AgentTools
 from backend.llm.llm_factory import LLMConfig
@@ -86,19 +85,13 @@ class AddToTrackerWorkflow(BaseWorkflow):
         "count": "int — number of jobs added",
     }
 
-    def run(self) -> Generator[dict, None, WorkflowResult]:
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Identifying which jobs to add to the tracker...\n"},
-        }
+    def run(self) -> WorkflowResult:
+        self.event_bus.emit("text_delta", {"content": "Identifying which jobs to add to the tracker...\n"})
 
         # 1. Fetch search results for this conversation
         sr_response = self.tools.execute("list_search_results", {})
         if "error" in sr_response:
-            yield {
-                "event": "text_delta",
-                "data": {"content": f"Error fetching search results: {sr_response['error']}\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": f"Error fetching search results: {sr_response['error']}\n"})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -108,10 +101,7 @@ class AddToTrackerWorkflow(BaseWorkflow):
 
         all_results = sr_response.get("results", [])
         if not all_results:
-            yield {
-                "event": "text_delta",
-                "data": {"content": "No search results found in this conversation to add.\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": "No search results found in this conversation to add.\n"})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -122,10 +112,7 @@ class AddToTrackerWorkflow(BaseWorkflow):
         # Filter out results already in the tracker
         available = [r for r in all_results if not r.get("added_to_tracker")]
         if not available:
-            yield {
-                "event": "text_delta",
-                "data": {"content": "All search results have already been added to the tracker.\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": "All search results have already been added to the tracker.\n"})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=True,
@@ -145,10 +132,7 @@ class AddToTrackerWorkflow(BaseWorkflow):
         )
 
         if not resolved:
-            yield {
-                "event": "text_delta",
-                "data": {"content": "Couldn't determine which search results to add. Please be more specific.\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": "Couldn't determine which search results to add. Please be more specific.\n"})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -173,12 +157,9 @@ class AddToTrackerWorkflow(BaseWorkflow):
                 skipped.append({"result_id": match.result_id, "reason": "not found"})
                 continue
 
-            yield {
-                "event": "text_delta",
-                "data": {
-                    "content": f"Adding **{sr['title']}** at **{sr['company']}** to tracker...\n",
-                },
-            }
+            self.event_bus.emit("text_delta", {
+                "content": f"Adding **{sr['title']}** at **{sr['company']}** to tracker...\n",
+            })
 
             result = _promote_search_result(self.tools, sr)
 
@@ -194,12 +175,9 @@ class AddToTrackerWorkflow(BaseWorkflow):
                     "title": sr["title"],
                     "reason": result["error"],
                 })
-                yield {
-                    "event": "text_delta",
-                    "data": {
-                        "content": f"  Failed: {result['error']}\n",
-                    },
-                }
+                self.event_bus.emit("text_delta", {
+                    "content": f"  Failed: {result['error']}\n",
+                })
             else:
                 job = result["job"]
                 added_jobs.append(job)
@@ -210,14 +188,6 @@ class AddToTrackerWorkflow(BaseWorkflow):
                     job["title"],
                     job["company"],
                 )
-                yield {
-                    "event": "tool_result",
-                    "data": {
-                        "id": f"add_to_tracker_{sr['id']}",
-                        "name": "create_job",
-                        "result": job,
-                    },
-                }
 
         # 4. Build summary
         if added_jobs:
@@ -231,10 +201,7 @@ class AddToTrackerWorkflow(BaseWorkflow):
         if skipped:
             summary += f" ({len(skipped)} skipped due to errors.)"
 
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"\n{summary}\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"\n{summary}\n"})
 
         return WorkflowResult(
             outcome_id=self.outcome_id,

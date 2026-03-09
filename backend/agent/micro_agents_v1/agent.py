@@ -14,11 +14,13 @@ Pipeline stages:
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Generator
 
 import dspy
 
 from backend.agent.base import Agent
+from backend.agent.event_bus import EventBus
 from backend.agent.tools import AgentTools
 from backend.agent.user_profile import read_profile
 from backend.llm.llm_factory import LLMConfig
@@ -56,31 +58,25 @@ class MicroAgentsV1Agent(Agent):
         dspy.Module.__init__(self)
         self.llm_config = llm_config
         self.conversation_id = conversation_id
-
-        # Queued events from tool callbacks (e.g. search_result_added)
-        self._pending_events: list[dict] = []
+        self.event_bus = EventBus()
 
         # Shared tool interface
         self.tools = AgentTools(
             search_api_key=search_api_key,
             rapidapi_key=rapidapi_key,
             conversation_id=conversation_id,
-            event_callback=self._on_tool_event,
+            event_bus=self.event_bus,
         )
 
         # Pipeline stages
         self.outcome_planner = OutcomePlanner(llm_config)
         self.workflow_mapper = WorkflowMapper(llm_config)
-        self.workflow_executor = WorkflowExecutor(self.tools, llm_config)
-        self.result_collator = ResultCollator(llm_config)
+        self.workflow_executor = WorkflowExecutor(self.tools, llm_config, self.event_bus)
+        self.result_collator = ResultCollator(llm_config, self.event_bus)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-
-    def _on_tool_event(self, event: dict):
-        """Callback for tool-emitted SSE events (e.g. search_result_added)."""
-        self._pending_events.append(event)
 
     @staticmethod
     def _available_workflows() -> list[dict]:
@@ -92,73 +88,80 @@ class MicroAgentsV1Agent(Agent):
     # ------------------------------------------------------------------
 
     def run(self, messages: list[dict]) -> Generator[dict, None, None]:
+        from flask import current_app
+        app = current_app._get_current_object()
+
+        thread = threading.Thread(
+            target=self._worker, args=(app, messages), daemon=True
+        )
+        thread.start()
+        yield from self.event_bus.drain_blocking()
+        thread.join()
+
+    def _worker(self, app, messages):
+        with app.app_context():
+            try:
+                self._pipeline(messages)
+            except Exception as exc:
+                logger.exception("MicroAgentsV1Agent error")
+                self.event_bus.emit("error", {"message": str(exc)})
+            finally:
+                self.event_bus.close()
+
+    def _pipeline(self, messages):
         user_message = messages[-1]["content"] if messages else ""
         user_profile = read_profile()
         full_text = ""
 
-        try:
-            # --- Stage 1: Outcome Planning ---
-            yield {"event": "text_delta", "data": {"content": "Thinking...\n\n"}}
-            full_text += "Thinking...\n\n"
+        # --- Stage 1: Outcome Planning ---
+        self.event_bus.emit("text_delta", {"content": "Thinking...\n\n"})
+        full_text += "Thinking...\n\n"
 
-            outcomes = self.outcome_planner.plan(
-                user_message=user_message,
-                conversation_history=messages,
-                user_profile=user_profile,
+        outcomes = self.outcome_planner.plan(
+            user_message=user_message,
+            conversation_history=messages,
+            user_profile=user_profile,
+        )
+
+        logger.debug(
+            "Planned outcomes: %s",
+            [(o.id, o.description, o.depends_on) for o in outcomes],
+        )
+
+        # --- Stage 2: Workflow Mapping ---
+        assignments = self.workflow_mapper.map(
+            outcomes=outcomes,
+            user_message=user_message,
+            available_workflows=self._available_workflows(),
+        )
+
+        logger.debug(
+            "Workflow assignments: %s",
+            [
+                (a.outcome.id, a.workflow_name, a.params, a.deferred_params)
+                for a in assignments
+            ],
+        )
+
+        # Inject recent conversation context into each assignment's
+        # params so workflows/resolvers can handle relative references
+        # like "the first one" or "the job we just discussed".
+        _MAX_CONTEXT_MESSAGES = 10
+        recent = messages[-(_MAX_CONTEXT_MESSAGES + 1) : -1]  # exclude current msg
+        if recent:
+            context_str = "\n".join(
+                f"{m['role']}: {m['content']}" for m in recent
             )
+            for assignment in assignments:
+                assignment.params["conversation_context"] = context_str
 
-            logger.debug(
-                "Planned outcomes: %s",
-                [(o.id, o.description, o.depends_on) for o in outcomes],
-            )
+        # --- Stage 3: Workflow Execution ---
+        results = self.workflow_executor.execute(assignments)
 
-            # --- Stage 2: Workflow Mapping ---
-            assignments = self.workflow_mapper.map(
-                outcomes=outcomes,
-                user_message=user_message,
-                available_workflows=self._available_workflows(),
-            )
+        # --- Stage 4: Result Collation ---
+        collated_text = self.result_collator.collate(
+            results, user_message, assignments=assignments
+        )
+        full_text += collated_text
 
-            logger.debug(
-                "Workflow assignments: %s",
-                [
-                    (a.outcome.id, a.workflow_name, a.params, a.deferred_params)
-                    for a in assignments
-                ],
-            )
-
-            # Inject recent conversation context into each assignment's
-            # params so workflows/resolvers can handle relative references
-            # like "the first one" or "the job we just discussed".
-            _MAX_CONTEXT_MESSAGES = 10
-            recent = messages[-(_MAX_CONTEXT_MESSAGES + 1) : -1]  # exclude current msg
-            if recent:
-                context_str = "\n".join(
-                    f"{m['role']}: {m['content']}" for m in recent
-                )
-                for assignment in assignments:
-                    assignment.params["conversation_context"] = context_str
-
-            # --- Stage 3: Workflow Execution ---
-            results = yield from self.workflow_executor.execute(assignments)
-
-            # Flush any tool-emitted events that queued during execution
-            # (e.g. search_result_added events for the UI results panel)
-            for event in self._pending_events:
-                yield event
-            self._pending_events.clear()
-
-            # --- Stage 4: Result Collation ---
-            for event in self.result_collator.collate(
-                results, user_message, assignments=assignments
-            ):
-                if event["event"] == "text_delta":
-                    full_text += event["data"]["content"]
-                yield event
-
-        except Exception as exc:
-            logger.exception("MicroAgentsV1Agent error")
-            yield {"event": "error", "data": {"message": str(exc)}}
-            return
-
-        yield {"event": "done", "data": {"content": full_text}}
+        self.event_bus.emit("done", {"content": full_text})

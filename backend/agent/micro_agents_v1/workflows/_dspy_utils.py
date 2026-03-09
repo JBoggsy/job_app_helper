@@ -8,10 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import queue
-import threading
-import uuid
-from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING, Any
 
 import dspy
@@ -42,21 +38,13 @@ def build_lm(llm_config: "LLMConfig") -> dspy.LM:
     )
 
 
-def build_dspy_tools(
-    agent_tools: AgentTools,
-    event_queue: queue.Queue | None = None,
-) -> list[dspy.Tool]:
+def build_dspy_tools(agent_tools: AgentTools) -> list[dspy.Tool]:
     """Convert registered AgentTools into ``dspy.Tool`` instances.
 
     Each agent tool is wrapped in a plain function that DSPy's ReAct (or
     any other tool-using DSPy module) can call.  The wrapper delegates to
-    ``AgentTools.execute()`` which handles validation and error capture.
-
-    If *event_queue* is provided, the wrapper emits ``tool_start`` and
-    ``tool_result`` (or ``tool_error``) event dicts to the queue before
-    and after each tool execution.  This allows callers to stream
-    progress events from an otherwise synchronous DSPy module call — see
-    :func:`run_dspy_module_streaming`.
+    ``AgentTools.execute()`` which handles validation, error capture, and
+    auto-emission of tool_start/tool_result/tool_error events to the bus.
     """
     dspy_tools: list[dspy.Tool] = []
 
@@ -92,34 +80,8 @@ def build_dspy_tools(
                 ):
                     kwargs = kwargs["kwargs"]
 
-                call_id = str(uuid.uuid4())[:8]
-
-                # Emit tool_start event
-                if event_queue is not None:
-                    event_queue.put({
-                        "event": "tool_start",
-                        "data": {
-                            "id": call_id,
-                            "name": tool_name,
-                            "arguments": kwargs,
-                        },
-                    })
-
+                # Just call execute — events are auto-emitted by the bus
                 result = agent_tools.execute(tool_name, kwargs)
-
-                # Emit tool_result event
-                if event_queue is not None:
-                    event_queue.put({
-                        "event": "tool_result",
-                        "data": {
-                            "id": call_id,
-                            "name": tool_name,
-                            "result": result,
-                        },
-                    })
-
-                # Return a string representation so DSPy can include it
-                # in the trajectory.
                 return json.dumps(result, default=str)
 
             _fn.__name__ = tool_name
@@ -137,67 +99,6 @@ def build_dspy_tools(
         )
 
     return dspy_tools
-
-
-# ---------------------------------------------------------------------------
-# Streaming helper for synchronous DSPy module calls
-# ---------------------------------------------------------------------------
-
-# Sentinel object to signal the worker thread has finished.
-_SENTINEL = object()
-
-
-def run_dspy_module_streaming(
-    fn: Callable[[], Any],
-    event_queue: queue.Queue,
-) -> Generator[dict, None, Any]:
-    """Run a synchronous DSPy module call in a thread, yielding events.
-
-    *fn* should be a zero-argument callable that invokes the DSPy module
-    (e.g. ``lambda: react(task=task, context=context)``).
-
-    Tool shims created by :func:`build_dspy_tools` with the same
-    *event_queue* will push ``tool_start`` / ``tool_result`` events as
-    tools are called inside the ReAct loop.  This generator drains the
-    queue in real-time, yielding each event as an SSE dict so the caller
-    can ``yield from`` it.
-
-    The return value of *fn* is propagated via ``StopIteration.value``.
-
-    Raises:
-        Any exception raised by *fn* is re-raised after all queued
-        events have been yielded.
-    """
-    result_holder: list[Any] = [None]
-    error_holder: list[BaseException | None] = [None]
-
-    def _worker() -> None:
-        try:
-            result_holder[0] = fn()
-        except BaseException as exc:
-            error_holder[0] = exc
-        finally:
-            event_queue.put(_SENTINEL)
-
-    thread = threading.Thread(target=_worker, daemon=True)
-    thread.start()
-
-    # Drain events until the worker signals completion.
-    while True:
-        try:
-            item = event_queue.get(timeout=0.5)
-        except queue.Empty:
-            continue
-        if item is _SENTINEL:
-            break
-        yield item
-
-    thread.join()
-
-    if error_holder[0] is not None:
-        raise error_holder[0]
-
-    return result_holder[0]
 
 
 # ---------------------------------------------------------------------------

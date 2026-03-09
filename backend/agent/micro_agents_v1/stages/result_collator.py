@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Generator
 
 import litellm
 
+from backend.agent.event_bus import EventBus
 from backend.llm.llm_factory import LLMConfig
 
 from ..stages.workflow_mapper import WorkflowAssignment
@@ -50,8 +50,9 @@ class ResultCollator:
     incrementally instead of waiting for the full response.
     """
 
-    def __init__(self, llm_config: LLMConfig):
+    def __init__(self, llm_config: LLMConfig, event_bus: EventBus | None = None):
         self.llm_config = llm_config
+        self.event_bus = event_bus
 
     # ------------------------------------------------------------------
     # Helpers
@@ -116,11 +117,11 @@ class ResultCollator:
         results: list[WorkflowResult],
         user_message: str,
         assignments: list[WorkflowAssignment] | None = None,
-    ) -> Generator[dict, None, None]:
+    ) -> str:
         """Synthesise workflow results into a streamed user response.
 
-        Yields SSE ``text_delta`` events token-by-token as the LLM
-        generates them.
+        Emits ``text_delta`` events to the event bus token-by-token.
+        Returns the full accumulated text.
 
         Args:
             results: Completed :class:`WorkflowResult` objects from
@@ -130,8 +131,8 @@ class ResultCollator:
                 each result is annotated with its workflow name and
                 output schema for better collation.
 
-        Yields:
-            SSE event dicts with ``event: text_delta``.
+        Returns:
+            The full accumulated response text.
         """
         logger.info(
             "ResultCollator synthesising %d result(s) for: %s",
@@ -157,7 +158,12 @@ class ResultCollator:
             **self._completion_kwargs(),
         )
 
+        full_text = ""
         for chunk in response:
             delta = chunk.choices[0].delta
             if delta.content:
-                yield {"event": "text_delta", "data": {"content": delta.content}}
+                if self.event_bus:
+                    self.event_bus.emit("text_delta", {"content": delta.content})
+                full_text += delta.content
+
+        return full_text

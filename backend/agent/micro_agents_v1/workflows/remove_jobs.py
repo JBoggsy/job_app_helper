@@ -9,7 +9,6 @@ Pipeline:
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator
 
 from backend.agent.tools import AgentTools
 from backend.llm.llm_factory import LLMConfig
@@ -30,22 +29,16 @@ class RemoveJobsWorkflow(BaseWorkflow):
         "count": "int — number successfully removed",
     }
 
-    def run(self) -> Generator[dict, None, WorkflowResult]:
+    def run(self) -> WorkflowResult:
         user_message = self.outcome_description or self.params.get("user_message", "")
         conversation_context = self.params.get("conversation_context", "")
 
         # 1. Fetch tracker jobs
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Identifying which job(s) to remove...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Identifying which job(s) to remove...\n"})
 
         jobs_resp = self.tools.execute("list_jobs", {"limit": 50})
         if "error" in jobs_resp:
-            yield {
-                "event": "text_delta",
-                "data": {"content": f"Error fetching jobs: {jobs_resp['error']}\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": f"Error fetching jobs: {jobs_resp['error']}\n"})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -55,10 +48,7 @@ class RemoveJobsWorkflow(BaseWorkflow):
 
         tracker_jobs = jobs_resp.get("jobs", [])
         if not tracker_jobs:
-            yield {
-                "event": "text_delta",
-                "data": {"content": "No jobs in the tracker to remove.\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": "No jobs in the tracker to remove.\n"})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -76,7 +66,7 @@ class RemoveJobsWorkflow(BaseWorkflow):
 
         if not resolved:
             msg = "Couldn't determine which job(s) to remove. Please be more specific.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -97,31 +87,17 @@ class RemoveJobsWorkflow(BaseWorkflow):
                 continue
 
             job_label = f"{job['title']} at {job['company']}"
-            yield {
-                "event": "text_delta",
-                "data": {"content": f"Removing **{job_label}**...\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": f"Removing **{job_label}**...\n"})
 
             result = self.tools.execute("remove_job", {"job_id": job["id"]})
 
             if "error" in result:
                 logger.error("Failed to remove job %d: %s", job["id"], result["error"])
                 failed.append({"job_id": job["id"], "label": job_label, "reason": result["error"]})
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": f"  Failed: {result['error']}\n"},
-                }
+                self.event_bus.emit("text_delta", {"content": f"  Failed: {result['error']}\n"})
             else:
                 removed.append(job)
                 logger.info("Removed job %d: %s", job["id"], job_label)
-                yield {
-                    "event": "tool_result",
-                    "data": {
-                        "id": f"remove_job_{job['id']}",
-                        "name": "remove_job",
-                        "result": result.get("deleted", {}),
-                    },
-                }
 
         # 4. Summary
         if removed:
@@ -133,10 +109,7 @@ class RemoveJobsWorkflow(BaseWorkflow):
         if failed:
             summary += f" ({len(failed)} failed.)"
 
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"\n{summary}\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"\n{summary}\n"})
 
         return WorkflowResult(
             outcome_id=self.outcome_id,

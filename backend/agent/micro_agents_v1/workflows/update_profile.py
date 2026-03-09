@@ -13,7 +13,6 @@ Pipeline:
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator
 from typing import Optional
 
 import dspy
@@ -103,14 +102,11 @@ class UpdateProfileWorkflow(BaseWorkflow):
         "count": "int — number of sections successfully updated",
     }
 
-    def run(self) -> Generator[dict, None, WorkflowResult]:
+    def run(self) -> WorkflowResult:
         user_message = self.outcome_description or self.params.get("user_message", "")
 
         # 1. Load current profile
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Reading your current profile...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Reading your current profile...\n"})
 
         profile_resp = self.tools.execute("read_user_profile", {})
         current_profile = profile_resp.get("content", "")
@@ -126,10 +122,7 @@ class UpdateProfileWorkflow(BaseWorkflow):
                 resume_data = resume_resp["text"]
 
         # 2. Extract updates
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Determining what to update...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Determining what to update...\n"})
 
         extractor = dspy.ChainOfThought(ExtractProfileUpdatesSig)
 
@@ -142,7 +135,7 @@ class UpdateProfileWorkflow(BaseWorkflow):
 
         if not result.updates:
             msg = "Couldn't determine what profile changes to make. Please be more specific.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -162,12 +155,9 @@ class UpdateProfileWorkflow(BaseWorkflow):
                 failed.append({"section": section, "reason": "unknown section"})
                 continue
 
-            yield {
-                "event": "text_delta",
-                "data": {
-                    "content": f"Updating **{section}**: {update.change_summary}\n",
-                },
-            }
+            self.event_bus.emit("text_delta", {
+                "content": f"Updating **{section}**: {update.change_summary}\n",
+            })
 
             resp = self.tools.execute("update_user_profile", {
                 "section": section,
@@ -177,10 +167,7 @@ class UpdateProfileWorkflow(BaseWorkflow):
             if "error" in resp:
                 logger.error("Failed to update section %s: %s", section, resp["error"])
                 failed.append({"section": section, "reason": resp["error"]})
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": f"  Failed: {resp['error']}\n"},
-                }
+                self.event_bus.emit("text_delta", {"content": f"  Failed: {resp['error']}\n"})
             else:
                 applied.append({
                     "section": section,
@@ -197,10 +184,7 @@ class UpdateProfileWorkflow(BaseWorkflow):
         if failed:
             summary += f" ({len(failed)} failed.)"
 
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"\n{summary}\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"\n{summary}\n"})
 
         return WorkflowResult(
             outcome_id=self.outcome_id,

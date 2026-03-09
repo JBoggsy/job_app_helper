@@ -99,11 +99,8 @@ class SearchResultsMixin:
         )
 
         # Emit SSE event so the frontend search results panel updates in real time
-        if self.event_callback:
-            self.event_callback({
-                "event": "search_result_added",
-                "data": result_dict,
-            })
+        if self.event_bus:
+            self.event_bus.emit("search_result_added", result_dict)
 
         return {"search_result": result_dict}
 

@@ -10,21 +10,19 @@ ReAct agent loop, just scoped to a single outcome rather than the whole
 user request.
 
 Tool calls are streamed to the user in real-time via SSE ``tool_start``
-and ``tool_result`` events — see :func:`run_dspy_module_streaming`.
+and ``tool_result`` events emitted by the event bus.
 """
 
 from __future__ import annotations
 
 import logging
-import queue
-from collections.abc import Generator
 
 import dspy
 
 from backend.agent.tools import AgentTools
 from backend.llm.llm_factory import LLMConfig
 
-from ._dspy_utils import build_dspy_tools, build_lm, run_dspy_module_streaming
+from ._dspy_utils import build_dspy_tools, build_lm
 from .registry import BaseWorkflow, WorkflowResult, register_workflow
 
 logger = logging.getLogger(__name__)
@@ -74,16 +72,12 @@ class GeneralWorkflow(BaseWorkflow):
         tools: AgentTools,
         llm_config: LLMConfig,
         outcome_description: str = "",
+        **kwargs,
     ):
-        super().__init__(outcome_id, params, tools, llm_config, outcome_description)
+        super().__init__(outcome_id, params, tools, llm_config, outcome_description, **kwargs)
 
-        # Event queue shared with tool shims — tool_start / tool_result
-        # events are pushed here as DSPy calls each tool and drained by
-        # run_dspy_module_streaming() in run().
-        self._event_queue: queue.Queue = queue.Queue()
-
-        # Build DSPy tools with event emission enabled
-        self._dspy_tools = build_dspy_tools(tools, event_queue=self._event_queue)
+        # Build DSPy tools — tool events auto-emit via AgentTools.execute()
+        self._dspy_tools = build_dspy_tools(tools)
 
         # Create the ReAct module
         self._react = dspy.ReAct(
@@ -96,12 +90,11 @@ class GeneralWorkflow(BaseWorkflow):
     # Run
     # ------------------------------------------------------------------
 
-    def run(self) -> Generator[dict, None, WorkflowResult]:
+    def run(self) -> WorkflowResult:
         """Execute the ReAct loop for this outcome.
 
-        Tool calls are streamed in real-time: the DSPy ReAct module runs
-        in a background thread while the generator drains ``tool_start``
-        and ``tool_result`` events from a shared queue.
+        Tool events are auto-emitted by AgentTools.execute() via the
+        event bus.
         """
         task = self.outcome_description or self.params.get("task", self.params.get("description", ""))
         context = ""
@@ -113,14 +106,8 @@ class GeneralWorkflow(BaseWorkflow):
         try:
             lm = build_lm(self.llm_config)
 
-            def _run_react():
-                with dspy.context(lm=lm):
-                    return self._react(task=task, context=context)
-
-            prediction = yield from run_dspy_module_streaming(
-                _run_react,
-                self._event_queue,
-            )
+            with dspy.context(lm=lm):
+                prediction = self._react(task=task, context=context)
 
             answer = prediction.answer
 
@@ -141,10 +128,7 @@ class GeneralWorkflow(BaseWorkflow):
             logger.exception(
                 "GeneralWorkflow failed for outcome %d", self.outcome_id
             )
-            yield {
-                "event": "text_delta",
-                "data": {"content": f"Error on outcome {self.outcome_id}: {exc}\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": f"Error on outcome {self.outcome_id}: {exc}\n"})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,

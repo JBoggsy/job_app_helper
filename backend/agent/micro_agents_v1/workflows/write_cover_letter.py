@@ -17,7 +17,6 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import logging
-from collections.abc import Generator
 
 import dspy
 from pydantic import BaseModel, Field
@@ -215,7 +214,7 @@ class WriteCoverLetterWorkflow(BaseWorkflow):
             )
         return result.section_draft
 
-    def run(self) -> Generator[dict, None, WorkflowResult]:
+    def run(self) -> WorkflowResult:
         user_message = self.outcome_description or self.params.get("user_message", "")
         conversation_context = self.params.get("conversation_context", "")
 
@@ -226,7 +225,7 @@ class WriteCoverLetterWorkflow(BaseWorkflow):
         )
         if not job:
             msg = "I need to know which job to target for this cover letter. Please specify the job.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -235,25 +234,16 @@ class WriteCoverLetterWorkflow(BaseWorkflow):
             )
 
         job_label = f"{job['title']} at {job['company']}"
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"Targeting: **{job_label}**\n\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"Targeting: **{job_label}**\n\n"})
 
         # 2. Load user context
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Loading your profile and resume context...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Loading your profile and resume context...\n"})
         user_context = load_user_context(self.tools)
 
         lm = build_lm(self.llm_config)
 
         # 3. Generate outline + narrative
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Generating outline and narrative...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Generating outline and narrative...\n"})
 
         outliner = dspy.ChainOfThought(GenerateOutlineSig)
         with dspy.context(lm=lm):
@@ -280,16 +270,10 @@ class WriteCoverLetterWorkflow(BaseWorkflow):
             outline_lines.append(f"   Focus: {points}")
 
         outline_lines.append("")
-        yield {
-            "event": "text_delta",
-            "data": {"content": "\n".join(outline_lines) + "\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "\n".join(outline_lines) + "\n"})
 
         # 4. Draft sections in parallel and assemble rough draft
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Drafting sections in parallel...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Drafting sections in parallel...\n"})
 
         section_drafts: dict[int, str] = {}
         with concurrent.futures.ThreadPoolExecutor(
@@ -318,17 +302,14 @@ class WriteCoverLetterWorkflow(BaseWorkflow):
                 else:
                     section_drafts[idx] = future.result().strip()
 
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": f"  drafted: {title}\n"},
-                }
+                self.event_bus.emit("text_delta", {"content": f"  drafted: {title}\n"})
 
         ordered_drafts = [section_drafts[i] for i in range(len(sections)) if section_drafts.get(i)]
         rough_draft = "\n\n".join(ordered_drafts).strip()
 
         if not rough_draft:
             msg = "I couldn't produce a usable draft for that job. Please try again.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -337,10 +318,7 @@ class WriteCoverLetterWorkflow(BaseWorkflow):
             )
 
         # 5. Unify continuity and transitions
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Unifying draft for continuity...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Unifying draft for continuity...\n"})
 
         unifier = dspy.ChainOfThought(UnifyDraftSig)
         with dspy.context(lm=lm):
@@ -356,10 +334,7 @@ class WriteCoverLetterWorkflow(BaseWorkflow):
         unified_draft = unified.unified_draft.strip() if unified.unified_draft else rough_draft
 
         # 6. Polish grammar, spelling, and style
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Polishing grammar and style...\n\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Polishing grammar and style...\n\n"})
 
         polisher = dspy.ChainOfThought(PolishLetterSig)
         with dspy.context(lm=lm):
@@ -394,21 +369,18 @@ class WriteCoverLetterWorkflow(BaseWorkflow):
             else "- Tailored to the role requirements and your background."
         )
 
-        yield {
-            "event": "text_delta",
-            "data": {
-                "content": (
-                    f"---\n\n"
-                    f"## Final Cover Letter{version_info}\n\n"
-                    f"{final_letter}\n\n"
-                    f"---\n\n"
-                    f"### Key Points Highlighted\n\n"
-                    f"{points_text}\n\n"
-                    f"*{edit_summary}*"
-                    f"{save_note}\n"
-                ),
-            },
-        }
+        self.event_bus.emit("text_delta", {
+            "content": (
+                f"---\n\n"
+                f"## Final Cover Letter{version_info}\n\n"
+                f"{final_letter}\n\n"
+                f"---\n\n"
+                f"### Key Points Highlighted\n\n"
+                f"{points_text}\n\n"
+                f"*{edit_summary}*"
+                f"{save_note}\n"
+            ),
+        })
 
         summary = f"Wrote cover letter for {job_label}{version_info}."
         if save_note:

@@ -28,8 +28,6 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import logging
-from collections.abc import Generator
-
 import dspy
 
 from backend.llm.llm_factory import LLMConfig
@@ -369,7 +367,7 @@ class SpecializeResumeWorkflow(BaseWorkflow):
 
     # -- Main run -----------------------------------------------------------
 
-    def run(self) -> Generator[dict, None, WorkflowResult]:
+    def run(self) -> WorkflowResult:
         user_message = self.outcome_description or self.params.get("user_message", "")
         conversation_context = self.params.get("conversation_context", "")
 
@@ -380,7 +378,7 @@ class SpecializeResumeWorkflow(BaseWorkflow):
         )
         if not job:
             msg = "I need to know which job to tailor your resume for. Please specify the job.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -389,21 +387,15 @@ class SpecializeResumeWorkflow(BaseWorkflow):
             )
 
         job_label = f"{job['title']} at {job['company']}"
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"Targeting: **{job_label}**\n\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"Targeting: **{job_label}**\n\n"})
 
         # 2. Load resume (job-specific version preferred) + user context
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Loading your resume and profile...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Loading your resume and profile...\n"})
 
         resume_text, resume_source = self._load_resume_text(job)
         if not resume_text:
             msg = "I couldn't find a resume to work with. Please upload your resume first.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -411,19 +403,13 @@ class SpecializeResumeWorkflow(BaseWorkflow):
                 summary=msg.strip(),
             )
 
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"Using {resume_source} as starting point.\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"Using {resume_source} as starting point.\n"})
 
         user_context = load_user_context(self.tools)
         lm = build_lm(self.llm_config)
 
         # 3. Identify resume sections
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Identifying resume sections...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Identifying resume sections...\n"})
 
         parser = dspy.ChainOfThought(IdentifySectionsSig)
         with dspy.context(lm=lm):
@@ -434,22 +420,16 @@ class SpecializeResumeWorkflow(BaseWorkflow):
             # Treat the whole resume as one section
             sections = [ResumeSection(title="Full Resume", content=resume_text)]
 
-        yield {
-            "event": "text_delta",
-            "data": {
-                "content": (
-                    f"Found {len(sections)} sections: "
-                    + ", ".join(s.title for s in sections)
-                    + "\n\n"
-                ),
-            },
-        }
+        self.event_bus.emit("text_delta", {
+            "content": (
+                f"Found {len(sections)} sections: "
+                + ", ".join(s.title for s in sections)
+                + "\n\n"
+            ),
+        })
 
         # 4. Critique each section in parallel
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Evaluating each section against the job requirements...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Evaluating each section against the job requirements...\n"})
 
         critiques: dict[int, dict] = {}
         with concurrent.futures.ThreadPoolExecutor(
@@ -476,16 +456,10 @@ class SpecializeResumeWorkflow(BaseWorkflow):
                 else:
                     critiques[idx] = future.result()
                 priority = critiques[idx]["priority"]
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": f"  {title}: {priority} priority\n"},
-                }
+                self.event_bus.emit("text_delta", {"content": f"  {title}: {priority} priority\n"})
 
         # 5. Revise each section in parallel
-        yield {
-            "event": "text_delta",
-            "data": {"content": "\nApplying revisions to each section...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "\nApplying revisions to each section...\n"})
 
         revised: dict[int, dict] = {}
         with concurrent.futures.ThreadPoolExecutor(
@@ -510,18 +484,12 @@ class SpecializeResumeWorkflow(BaseWorkflow):
                     }
                 else:
                     revised[idx] = future.result()
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": f"  revised: {title}\n"},
-                }
+                self.event_bus.emit("text_delta", {"content": f"  revised: {title}\n"})
 
         ordered_revisions = [revised[i] for i in range(len(sections))]
 
         # 6. Unification and editing pass
-        yield {
-            "event": "text_delta",
-            "data": {"content": "\nUnifying and polishing the full resume...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "\nUnifying and polishing the full resume...\n"})
 
         unifier = dspy.ChainOfThought(UnifyResumeSig)
         with dspy.context(lm=lm):
@@ -539,10 +507,7 @@ class SpecializeResumeWorkflow(BaseWorkflow):
         )
 
         # 7. Validate claims against user profile (using full, un-truncated context)
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Validating all claims against your profile...\n\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Validating all claims against your profile...\n\n"})
 
         full_user_context = load_user_context(self.tools, max_chars=None)
         validator = dspy.ChainOfThought(ValidateClaimsSig)
@@ -557,16 +522,13 @@ class SpecializeResumeWorkflow(BaseWorkflow):
 
         if flagged:
             flags_text = "\n".join(f"- ⚠️ {claim}" for claim in flagged)
-            yield {
-                "event": "text_delta",
-                "data": {
-                    "content": (
-                        f"### ⚠️ Flagged Claims\n\n"
-                        f"The following could not be verified against your profile "
-                        f"and may need your review:\n\n{flags_text}\n\n"
-                    ),
-                },
-            }
+            self.event_bus.emit("text_delta", {
+                "content": (
+                    f"### ⚠️ Flagged Claims\n\n"
+                    f"The following could not be verified against your profile "
+                    f"and may need your review:\n\n{flags_text}\n\n"
+                ),
+            })
 
         # 8. Save + present final resume
         all_changes = [
@@ -606,23 +568,20 @@ class SpecializeResumeWorkflow(BaseWorkflow):
             else ""
         )
 
-        yield {
-            "event": "text_delta",
-            "data": {
-                "content": (
-                    f"---\n\n"
-                    f"## Specialised Resume{version_info}\n\n"
-                    f"{unified_resume}\n\n"
-                    f"---\n\n"
-                    f"### Changes Made\n\n"
-                    f"{changes_text}\n\n"
-                    + (f"### Editing Notes\n\n{editing_text}\n\n" if editing_text else "")
-                    + f"*{edit_summary}*"
-                    + save_note
-                    + "\n"
-                ),
-            },
-        }
+        self.event_bus.emit("text_delta", {
+            "content": (
+                f"---\n\n"
+                f"## Specialised Resume{version_info}\n\n"
+                f"{unified_resume}\n\n"
+                f"---\n\n"
+                f"### Changes Made\n\n"
+                f"{changes_text}\n\n"
+                + (f"### Editing Notes\n\n{editing_text}\n\n" if editing_text else "")
+                + f"*{edit_summary}*"
+                + save_note
+                + "\n"
+            ),
+        })
 
         summary = f"Specialised resume for {job_label}{version_info}."
         if flagged:

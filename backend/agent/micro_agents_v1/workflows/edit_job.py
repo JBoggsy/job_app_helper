@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Generator
 from typing import Optional
 
 import dspy
@@ -100,15 +99,12 @@ class EditJobWorkflow(BaseWorkflow):
         "changes": "list[dict] — each with field, old_value, new_value",
     }
 
-    def run(self) -> Generator[dict, None, WorkflowResult]:
+    def run(self) -> WorkflowResult:
         user_message = self.outcome_description or self.params.get("user_message", "")
         conversation_context = self.params.get("conversation_context", "")
 
         # 1. Resolve the target job
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Identifying which job to edit...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Identifying which job to edit...\n"})
 
         job_id = self.params.get("job_id")
         job = None
@@ -137,7 +133,7 @@ class EditJobWorkflow(BaseWorkflow):
 
         if job is None:
             msg = "Couldn't determine which job to edit. Please be more specific.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -146,10 +142,7 @@ class EditJobWorkflow(BaseWorkflow):
             )
 
         job_label = f"{job['title']} at {job['company']}"
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"Editing **{job_label}**...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"Editing **{job_label}**...\n"})
 
         # 2. Extract field updates
         extractor = dspy.ChainOfThought(ExtractJobEditsSig)
@@ -162,7 +155,7 @@ class EditJobWorkflow(BaseWorkflow):
 
         if not result.updates:
             msg = "Couldn't determine what changes to make. Please be more specific.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -187,10 +180,7 @@ class EditJobWorkflow(BaseWorkflow):
         edit_result = self.tools.execute("edit_job", edit_kwargs)
 
         if "error" in edit_result:
-            yield {
-                "event": "text_delta",
-                "data": {"content": f"Error: {edit_result['error']}\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": f"Error: {edit_result['error']}\n"})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -201,24 +191,12 @@ class EditJobWorkflow(BaseWorkflow):
         updated_job = edit_result.get("job", {})
         changed_fields = edit_result.get("updated_fields", list(edit_kwargs.keys()))
 
-        yield {
-            "event": "tool_result",
-            "data": {
-                "id": f"edit_job_{job['id']}",
-                "name": "edit_job",
-                "result": updated_job,
-            },
-        }
-
         changes_desc = ", ".join(
             f"{u.field} → {u.value}" for u in result.updates
         )
         summary = f"Updated {job_label}: {changes_desc}."
 
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"\n{summary}\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"\n{summary}\n"})
 
         return WorkflowResult(
             outcome_id=self.outcome_id,

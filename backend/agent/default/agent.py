@@ -8,12 +8,14 @@ loop continues.
 
 import json
 import logging
+import threading
 import uuid
 from collections.abc import Generator
 
 import litellm
 
 from backend.agent.base import Agent
+from backend.agent.event_bus import EventBus
 from backend.agent.tools import AgentTools
 from backend.agent.user_profile import read_profile
 from backend.llm.llm_factory import LLMConfig
@@ -76,21 +78,15 @@ class DefaultAgent(Agent):
     ):
         self.llm_config = llm_config
         self.conversation_id = conversation_id
-
-        # Queued events from tool callbacks (e.g. search_result_added)
-        self._pending_events: list[dict] = []
+        self.event_bus = EventBus()
 
         self.tools = AgentTools(
             search_api_key=search_api_key,
             rapidapi_key=rapidapi_key,
             conversation_id=conversation_id,
-            event_callback=self._on_tool_event,
+            event_bus=self.event_bus,
         )
         self.openai_tools = _build_openai_tools(self.tools)
-
-    def _on_tool_event(self, event: dict):
-        """Callback for tool-emitted SSE events (e.g. search_result_added)."""
-        self._pending_events.append(event)
 
     def _completion_kwargs(self) -> dict:
         """Build kwargs for litellm.completion()."""
@@ -108,6 +104,28 @@ class DefaultAgent(Agent):
         return kwargs
 
     def run(self, messages: list[dict]) -> Generator[dict, None, None]:
+        from flask import current_app
+        app = current_app._get_current_object()
+
+        thread = threading.Thread(
+            target=self._worker, args=(app, messages), daemon=True
+        )
+        thread.start()
+        yield from self.event_bus.drain_blocking()
+        thread.join()
+
+    def _worker(self, app, messages):
+        with app.app_context():
+            try:
+                full_text = self._react_loop(messages)
+                self.event_bus.emit("done", {"content": full_text})
+            except Exception as exc:
+                logger.exception("DefaultAgent error")
+                self.event_bus.emit("error", {"message": str(exc)})
+            finally:
+                self.event_bus.close()
+
+    def _react_loop(self, messages):
         # Build the message list
         profile_content = read_profile()
         system_prompt = AGENT_SYSTEM_PROMPT.format(user_profile=profile_content)
@@ -134,12 +152,10 @@ class DefaultAgent(Agent):
                 for chunk in response:
                     delta = chunk.choices[0].delta
 
-                    # Accumulate text content for SSE streaming
                     if delta.content:
                         collected_content += delta.content
-                        yield {"event": "text_delta", "data": {"content": delta.content}}
+                        self.event_bus.emit("text_delta", {"content": delta.content})
 
-                    # Accumulate tool call fragments
                     if delta.tool_calls:
                         _accumulate_tool_calls(tool_call_chunks, delta.tool_calls)
 
@@ -185,30 +201,9 @@ class DefaultAgent(Agent):
                     "tool_calls": assistant_tool_calls,
                 })
 
-                # Execute each tool call
+                # Execute each tool call — events are auto-emitted by execute()
                 for tc in tool_calls:
-                    yield {
-                        "event": "tool_start",
-                        "data": {"id": tc["id"], "name": tc["name"], "arguments": tc["args"]},
-                    }
-
                     result = self.tools.execute(tc["name"], tc["args"])
-
-                    # Flush any pending events from tool callbacks
-                    for pending in self._pending_events:
-                        yield pending
-                    self._pending_events.clear()
-
-                    if "error" in result:
-                        yield {
-                            "event": "tool_error",
-                            "data": {"id": tc["id"], "name": tc["name"], "error": result["error"]},
-                        }
-                    else:
-                        yield {
-                            "event": "tool_result",
-                            "data": {"id": tc["id"], "name": tc["name"], "result": result},
-                        }
 
                     # Add tool result to history
                     llm_messages.append({
@@ -220,14 +215,12 @@ class DefaultAgent(Agent):
             except Exception as exc:
                 logger.exception("DefaultAgent error on iteration %d", _iteration)
 
-                # If we collected text before the error, preserve it
                 if collected_content:
                     full_text += collected_content
 
                 if _iteration >= MAX_ITERATIONS - 1:
-                    yield {"event": "error", "data": {"message": str(exc)}}
-                    return
+                    raise
                 logger.info("Retrying after error on iteration %d", _iteration)
                 continue
 
-        yield {"event": "done", "data": {"content": full_text}}
+        return full_text

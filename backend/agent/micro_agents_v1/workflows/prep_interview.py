@@ -43,8 +43,6 @@ from __future__ import annotations
 
 import concurrent.futures
 import logging
-import queue
-from collections.abc import Generator
 
 import dspy
 from pydantic import BaseModel, Field
@@ -342,11 +340,10 @@ class PrepInterviewWorkflow(BaseWorkflow):
         lm: dspy.LM,
         job_context: str,
         key_themes: str,
-        event_queue: queue.Queue | None = None,
     ) -> str:
         """Research the company via web search and generate a brief."""
         research_tools = [
-            t for t in build_dspy_tools(self.tools, event_queue=event_queue)
+            t for t in build_dspy_tools(self.tools)
             if t.name in self._COMPANY_BRIEF_TOOL_NAMES
         ]
         module = dspy.ReAct(
@@ -513,7 +510,7 @@ class PrepInterviewWorkflow(BaseWorkflow):
 
     # -- Main run -----------------------------------------------------------
 
-    def run(self) -> Generator[dict, None, WorkflowResult]:
+    def run(self) -> WorkflowResult:
         user_message = self.outcome_description or self.params.get("user_message", "")
         conversation_context = self.params.get("conversation_context", "")
 
@@ -524,7 +521,7 @@ class PrepInterviewWorkflow(BaseWorkflow):
         )
         if not job:
             msg = "I need to know which job to prepare for. Please specify the job.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -533,25 +530,16 @@ class PrepInterviewWorkflow(BaseWorkflow):
             )
 
         job_label = f"{job['title']} at {job['company']}"
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"Preparing interview guide for: **{job_label}**\n\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"Preparing interview guide for: **{job_label}**\n\n"})
 
         # 2. Load user context
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Loading your profile and resume...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Loading your profile and resume...\n"})
         user_context = load_user_context(self.tools)
 
         lm = build_lm(self.llm_config)
 
         # 3. Planning — analyse job, profile, and resume
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Analysing the role and your background...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Analysing the role and your background...\n"})
 
         planner = dspy.ChainOfThought(AnalyseInterviewSig)
         with dspy.context(lm=lm):
@@ -577,10 +565,7 @@ class PrepInterviewWorkflow(BaseWorkflow):
             for fa in focus_areas:
                 plan_lines.append(f"- {fa.area}: {fa.reasoning}")
         plan_lines.append("")
-        yield {
-            "event": "text_delta",
-            "data": {"content": "\n".join(plan_lines) + "\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "\n".join(plan_lines) + "\n"})
 
         # Serialise plan outputs for downstream modules
         key_themes_str = "\n".join(key_themes)
@@ -588,10 +573,7 @@ class PrepInterviewWorkflow(BaseWorkflow):
         gap_notes_str = "\n".join(gap_notes)
 
         # 4. Run five specialist sub-modules in parallel
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Generating interview preparation materials...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Generating interview preparation materials...\n"})
 
         section_results: dict[str, str] = {}
         section_labels = {
@@ -602,16 +584,11 @@ class PrepInterviewWorkflow(BaseWorkflow):
             "interviewer_qs": "Questions for the Interviewer",
         }
 
-        # Shared event queue — the company brief ReAct module pushes
-        # tool_start / tool_result events here as it calls web_search
-        # and scrape_url.  The main loop drains them in real-time.
-        tool_event_queue: queue.Queue = queue.Queue()
-
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
             futures: dict[concurrent.futures.Future, str] = {
                 pool.submit(
                     self._run_company_brief,
-                    lm, job_context, key_themes_str, tool_event_queue,
+                    lm, job_context, key_themes_str,
                 ): "company_brief",
                 pool.submit(
                     self._run_behavioural_questions,
@@ -632,55 +609,24 @@ class PrepInterviewWorkflow(BaseWorkflow):
                 ): "interviewer_qs",
             }
 
-            # Poll for tool events and future completions so the user
-            # sees web_search / scrape_url progress from the company
-            # brief ReAct module in real-time.
-            done_futures: set[concurrent.futures.Future] = set()
-            while len(done_futures) < len(futures):
-                # Drain any queued tool events
-                while not tool_event_queue.empty():
-                    try:
-                        yield tool_event_queue.get_nowait()
-                    except queue.Empty:
-                        break
+            # Wait for all futures to complete.  Tool events are
+            # auto-emitted by AgentTools.execute() via the event bus.
+            for future in concurrent.futures.as_completed(futures):
+                key = futures[future]
+                label = section_labels[key]
+                exc = future.exception()
+                if exc:
+                    logger.warning(
+                        "Interview prep sub-module '%s' failed: %s", key, exc,
+                    )
+                    section_results[key] = f"### {label}\n\n_Generation failed — please retry._"
+                else:
+                    section_results[key] = future.result()
 
-                # Wait briefly for newly completed futures
-                newly_done, _ = concurrent.futures.wait(
-                    futures.keys() - done_futures,
-                    timeout=0.3,
-                    return_when=concurrent.futures.FIRST_COMPLETED,
-                )
-                for future in newly_done:
-                    done_futures.add(future)
-                    key = futures[future]
-                    label = section_labels[key]
-                    exc = future.exception()
-                    if exc:
-                        logger.warning(
-                            "Interview prep sub-module '%s' failed: %s", key, exc,
-                        )
-                        section_results[key] = f"### {label}\n\n_Generation failed — please retry._"
-                    else:
-                        section_results[key] = future.result()
-
-                    yield {
-                        "event": "text_delta",
-                        "data": {"content": f"  completed: {label}\n"},
-                    }
-
-            # Final drain — catch any events pushed between the last
-            # poll and future completion.
-            while not tool_event_queue.empty():
-                try:
-                    yield tool_event_queue.get_nowait()
-                except queue.Empty:
-                    break
+                self.event_bus.emit("text_delta", {"content": f"  completed: {label}\n"})
 
         # 5. Assemble into a unified prep guide
-        yield {
-            "event": "text_delta",
-            "data": {"content": "\nAssembling your interview prep guide...\n\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "\nAssembling your interview prep guide...\n\n"})
 
         assembler = dspy.ChainOfThought(AssemblePrepGuideSig)
         with dspy.context(lm=lm):
@@ -711,18 +657,15 @@ class PrepInterviewWorkflow(BaseWorkflow):
                 + "\n\n"
             )
 
-        yield {
-            "event": "text_delta",
-            "data": {
-                "content": (
-                    f"---\n\n"
-                    f"# Interview Prep Guide — {job_label}\n\n"
-                    f"{checklist_text}"
-                    f"{guide}\n\n"
-                    f"---\n"
-                ),
-            },
-        }
+        self.event_bus.emit("text_delta", {
+            "content": (
+                f"---\n\n"
+                f"# Interview Prep Guide — {job_label}\n\n"
+                f"{checklist_text}"
+                f"{guide}\n\n"
+                f"---\n"
+            ),
+        })
 
         summary = f"Generated interview prep guide for {job_label}."
 

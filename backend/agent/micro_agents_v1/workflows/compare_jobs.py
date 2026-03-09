@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Generator
 
 import dspy
 from pydantic import BaseModel, Field
@@ -98,16 +97,13 @@ class CompareJobsWorkflow(BaseWorkflow):
 
     def _gather_jobs(
         self, user_message: str, conversation_context: str,
-    ) -> Generator[dict, None, list[dict]]:
+    ) -> list[dict]:
         """Resolve jobs from both tracker and search results.
 
         Returns a unified list of job-data dicts (with a ``_source``
         field indicating ``"tracker"`` or ``"search_result"``).
         """
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Identifying which jobs to compare...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Identifying which jobs to compare...\n"})
 
         collected: list[dict] = []
         seen_keys: set[tuple] = set()  # (company_lower, title_lower) for dedup
@@ -156,12 +152,12 @@ class CompareJobsWorkflow(BaseWorkflow):
 
         return collected
 
-    def run(self) -> Generator[dict, None, WorkflowResult]:
+    def run(self) -> WorkflowResult:
         user_message = self.outcome_description or self.params.get("user_message", "")
         conversation_context = self.params.get("conversation_context", "")
 
         # 1. Gather jobs to compare
-        jobs_to_compare = yield from self._gather_jobs(user_message, conversation_context)
+        jobs_to_compare = self._gather_jobs(user_message, conversation_context)
 
         if len(jobs_to_compare) < 2:
             msg = (
@@ -169,7 +165,7 @@ class CompareJobsWorkflow(BaseWorkflow):
                 + (f"only found {len(jobs_to_compare)}." if jobs_to_compare else "found none.")
                 + " Please specify which jobs you'd like to compare.\n"
             )
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -178,10 +174,7 @@ class CompareJobsWorkflow(BaseWorkflow):
             )
 
         labels = [f"{j['title']} at {j['company']}" for j in jobs_to_compare]
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"Comparing {len(jobs_to_compare)} jobs: {', '.join(labels)}...\n\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"Comparing {len(jobs_to_compare)} jobs: {', '.join(labels)}...\n\n"})
 
         # 2. Load user profile
         profile_resp = self.tools.execute("read_user_profile", {})
@@ -199,36 +192,21 @@ class CompareJobsWorkflow(BaseWorkflow):
 
         # 4. Format and stream the comparison
         for comp in result.comparisons:
-            yield {
-                "event": "text_delta",
-                "data": {"content": f"### {comp.label}\n"},
-            }
-            yield {
-                "event": "text_delta",
-                "data": {"content": (
-                    f"- **Compensation:** {comp.compensation}\n"
-                    f"- **Location:** {comp.location_and_remote}\n"
-                    f"- **Fit Score:** {comp.fit_score}\n"
-                    f"- **Requirements Match:** {comp.requirements_match}\n"
-                )},
-            }
+            self.event_bus.emit("text_delta", {"content": f"### {comp.label}\n"})
+            self.event_bus.emit("text_delta", {"content": (
+                f"- **Compensation:** {comp.compensation}\n"
+                f"- **Location:** {comp.location_and_remote}\n"
+                f"- **Fit Score:** {comp.fit_score}\n"
+                f"- **Requirements Match:** {comp.requirements_match}\n"
+            )})
             if comp.strengths:
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": "- **Strengths:** " + "; ".join(comp.strengths) + "\n"},
-                }
+                self.event_bus.emit("text_delta", {"content": "- **Strengths:** " + "; ".join(comp.strengths) + "\n"})
             if comp.weaknesses:
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": "- **Weaknesses:** " + "; ".join(comp.weaknesses) + "\n"},
-                }
-            yield {"event": "text_delta", "data": {"content": "\n"}}
+                self.event_bus.emit("text_delta", {"content": "- **Weaknesses:** " + "; ".join(comp.weaknesses) + "\n"})
+            self.event_bus.emit("text_delta", {"content": "\n"})
 
         # Recommendation
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"### Recommendation\n{result.recommendation}\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"### Recommendation\n{result.recommendation}\n"})
 
         summary = f"Compared {len(jobs_to_compare)} jobs. {result.recommendation}"
 

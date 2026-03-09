@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Generator
 from typing import Optional
 
 import dspy
@@ -165,8 +164,8 @@ class ApplicationTodosWorkflow(BaseWorkflow):
         "final_todos": "list[dict] — full current todo list after changes",
     }
 
-    def _resolve_job(self, user_message: str, conversation_context: str) -> Generator[dict, None, dict | None]:
-        """Resolve the target job, yielding progress events. Returns job dict or None."""
+    def _resolve_job(self, user_message: str, conversation_context: str) -> dict | None:
+        """Resolve the target job, emitting progress events. Returns job dict or None."""
         # Check if job_id was provided directly in params
         job_id = self.params.get("job_id")
         if job_id:
@@ -177,25 +176,16 @@ class ApplicationTodosWorkflow(BaseWorkflow):
                         return j
             # Fall through to resolver if direct lookup failed
 
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Identifying which job to manage todos for...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Identifying which job to manage todos for...\n"})
 
         jobs_response = self.tools.execute("list_jobs", {"limit": 50})
         if "error" in jobs_response:
-            yield {
-                "event": "text_delta",
-                "data": {"content": f"Error fetching jobs: {jobs_response['error']}\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": f"Error fetching jobs: {jobs_response['error']}\n"})
             return None
 
         jobs = jobs_response.get("jobs", [])
         if not jobs:
-            yield {
-                "event": "text_delta",
-                "data": {"content": "No jobs in the tracker yet.\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": "No jobs in the tracker yet.\n"})
             return None
 
         resolver = JobResolver(self.llm_config)
@@ -206,10 +196,7 @@ class ApplicationTodosWorkflow(BaseWorkflow):
         )
 
         if not resolved:
-            yield {
-                "event": "text_delta",
-                "data": {"content": "Couldn't determine which job you're referring to. Please be more specific.\n"},
-            }
+            self.event_bus.emit("text_delta", {"content": "Couldn't determine which job you're referring to. Please be more specific.\n"})
             return None
 
         job_id = resolved[0].job_id
@@ -240,12 +227,9 @@ class ApplicationTodosWorkflow(BaseWorkflow):
 
     def _generate_todos(
         self, job: dict, todos: list[dict],
-    ) -> Generator[dict, None, list[dict]]:
+    ) -> list[dict]:
         """Generate recommended todos and add them via the tool."""
-        yield {
-            "event": "text_delta",
-            "data": {"content": "Generating recommended application steps...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": "Generating recommended application steps...\n"})
 
         # Load user profile for context
         profile_resp = self.tools.execute("read_user_profile", {})
@@ -279,24 +263,18 @@ class ApplicationTodosWorkflow(BaseWorkflow):
 
             if "error" in add_result:
                 logger.error("Failed to add todo: %s", add_result["error"])
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": f"  Failed to add: {todo.title}\n"},
-                }
+                self.event_bus.emit("text_delta", {"content": f"  Failed to add: {todo.title}\n"})
             else:
                 added.append(add_result["todo"])
-                yield {
-                    "event": "text_delta",
-                    "data": {
-                        "content": f"  Added: **{todo.title}** ({category})\n",
-                    },
-                }
+                self.event_bus.emit("text_delta", {
+                    "content": f"  Added: **{todo.title}** ({category})\n",
+                })
 
         return added
 
     def _execute_actions(
         self, job: dict, user_message: str, todos: list[dict],
-    ) -> Generator[dict, None, list[dict]]:
+    ) -> list[dict]:
         """Extract and execute specific todo actions from the user message."""
         lm = build_lm(self.llm_config)
         extractor = dspy.ChainOfThought(ExtractTodoActionsSig)
@@ -320,16 +298,10 @@ class ApplicationTodosWorkflow(BaseWorkflow):
                 })
                 if "error" not in resp:
                     status = "completed" if completed else "incomplete"
-                    yield {
-                        "event": "text_delta",
-                        "data": {"content": f"  Marked **{resp['todo']['title']}** as {status}\n"},
-                    }
+                    self.event_bus.emit("text_delta", {"content": f"  Marked **{resp['todo']['title']}** as {status}\n"})
                     results.append(resp["todo"])
                 else:
-                    yield {
-                        "event": "text_delta",
-                        "data": {"content": f"  Error: {resp['error']}\n"},
-                    }
+                    self.event_bus.emit("text_delta", {"content": f"  Error: {resp['error']}\n"})
 
             elif action.action == "add":
                 if not action.title:
@@ -342,16 +314,10 @@ class ApplicationTodosWorkflow(BaseWorkflow):
                     "description": action.description or "",
                 })
                 if "error" not in resp:
-                    yield {
-                        "event": "text_delta",
-                        "data": {"content": f"  Added: **{action.title}** ({category})\n"},
-                    }
+                    self.event_bus.emit("text_delta", {"content": f"  Added: **{action.title}** ({category})\n"})
                     results.append(resp["todo"])
                 else:
-                    yield {
-                        "event": "text_delta",
-                        "data": {"content": f"  Error: {resp['error']}\n"},
-                    }
+                    self.event_bus.emit("text_delta", {"content": f"  Error: {resp['error']}\n"})
 
             elif action.action == "remove":
                 if action.todo_id is None:
@@ -361,25 +327,19 @@ class ApplicationTodosWorkflow(BaseWorkflow):
                     "todo_id": action.todo_id,
                 })
                 if "error" not in resp:
-                    yield {
-                        "event": "text_delta",
-                        "data": {"content": f"  Removed: **{resp['deleted']['title']}**\n"},
-                    }
+                    self.event_bus.emit("text_delta", {"content": f"  Removed: **{resp['deleted']['title']}**\n"})
                     results.append(resp["deleted"])
                 else:
-                    yield {
-                        "event": "text_delta",
-                        "data": {"content": f"  Error: {resp['error']}\n"},
-                    }
+                    self.event_bus.emit("text_delta", {"content": f"  Error: {resp['error']}\n"})
 
         return results
 
-    def run(self) -> Generator[dict, None, WorkflowResult]:
+    def run(self) -> WorkflowResult:
         user_message = self.outcome_description or self.params.get("user_message", "")
         conversation_context = self.params.get("conversation_context", "")
 
         # 1. Resolve the target job
-        job = yield from self._resolve_job(user_message, conversation_context)
+        job = self._resolve_job(user_message, conversation_context)
         if job is None:
             return WorkflowResult(
                 outcome_id=self.outcome_id,
@@ -389,10 +349,7 @@ class ApplicationTodosWorkflow(BaseWorkflow):
             )
 
         job_label = f"{job['title']} at {job['company']}"
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"Managing todos for **{job_label}**...\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"Managing todos for **{job_label}**...\n"})
 
         # 2. Fetch current todos
         todos_response = self.tools.execute("list_job_todos", {"job_id": job["id"]})
@@ -408,33 +365,24 @@ class ApplicationTodosWorkflow(BaseWorkflow):
 
         # 4. Execute based on intent
         if intent == "generate":
-            added = yield from self._generate_todos(job, current_todos)
+            added = self._generate_todos(job, current_todos)
             summary = f"Generated {len(added)} application step(s) for {job_label}."
             data = {"job": job, "added_todos": added, "intent": intent}
 
         elif intent == "list":
             if current_todos:
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": f"\nCurrent todos for **{job_label}**:\n"},
-                }
+                self.event_bus.emit("text_delta", {"content": f"\nCurrent todos for **{job_label}**:\n"})
                 for t in current_todos:
                     check = "x" if t["completed"] else " "
-                    yield {
-                        "event": "text_delta",
-                        "data": {"content": f"  [{check}] {t['title']} ({t['category']})\n"},
-                    }
+                    self.event_bus.emit("text_delta", {"content": f"  [{check}] {t['title']} ({t['category']})\n"})
             else:
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": f"No todos yet for **{job_label}**.\n"},
-                }
+                self.event_bus.emit("text_delta", {"content": f"No todos yet for **{job_label}**.\n"})
             summary = f"Listed {len(current_todos)} todo(s) for {job_label}."
             data = {"job": job, "todos": current_todos, "intent": intent}
 
         else:
             # toggle, add, remove
-            results = yield from self._execute_actions(job, user_message, current_todos)
+            results = self._execute_actions(job, user_message, current_todos)
             summary = f"Performed {len(results)} todo action(s) for {job_label}."
             data = {"job": job, "action_results": results, "intent": intent}
 
@@ -443,10 +391,7 @@ class ApplicationTodosWorkflow(BaseWorkflow):
         if "error" not in final_todos:
             data["final_todos"] = final_todos.get("todos", [])
 
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"\n{summary}\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"\n{summary}\n"})
 
         return WorkflowResult(
             outcome_id=self.outcome_id,

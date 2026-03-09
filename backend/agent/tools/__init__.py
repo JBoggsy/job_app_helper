@@ -28,6 +28,9 @@ Key methods on AgentTools:
 """
 
 import logging
+import uuid
+
+from backend.agent.event_bus import EventBus
 
 # Mixin imports must come before AgentTools so that the @agent_tool
 # decorators fire and populate _TOOL_REGISTRY before get_tool_definitions()
@@ -61,24 +64,59 @@ class AgentTools(
         search_api_key:    Tavily API key
         rapidapi_key:      RapidAPI key (for JSearch, Active Jobs DB, LinkedIn Jobs)
         conversation_id:   Current conversation ID
-        event_callback:    Callable for SSE events (e.g. search_result_added)
+        event_bus:         EventBus for auto-emitting tool_start/tool_result/tool_error
     """
 
     def __init__(self, search_api_key="", rapidapi_key="",
-                 conversation_id=None, event_callback=None):
+                 conversation_id=None, event_bus: EventBus | None = None):
         self.search_api_key = search_api_key
         self.rapidapi_key = rapidapi_key
         self.conversation_id = conversation_id
-        self.event_callback = event_callback
+        self.event_bus = event_bus
 
-    def execute(self, tool_name, arguments):
+    def execute(self, tool_name, arguments=None):
         """Execute a tool by name with error handling.
+
+        Auto-emits tool_start/tool_result/tool_error events to the event
+        bus if one is configured.
 
         Arguments are validated against the tool's args_schema (if any).
         For tools with no args_schema, any LLM-hallucinated arguments
         are ignored.  For tools with a schema, Pydantic validates and
         strips unknown fields before dispatch.
         """
+        arguments = arguments or {}
+        call_id = str(uuid.uuid4())[:8]
+
+        # Auto-emit tool_start
+        if self.event_bus:
+            self.event_bus.emit("tool_start", {
+                "id": call_id,
+                "name": tool_name,
+                "arguments": arguments,
+            })
+
+        result = self._execute_inner(tool_name, arguments)
+
+        # Auto-emit tool_result or tool_error
+        if self.event_bus:
+            if "error" in result:
+                self.event_bus.emit("tool_error", {
+                    "id": call_id,
+                    "name": tool_name,
+                    "error": result["error"],
+                })
+            else:
+                self.event_bus.emit("tool_result", {
+                    "id": call_id,
+                    "name": tool_name,
+                    "result": result,
+                })
+
+        return result
+
+    def _execute_inner(self, tool_name, arguments):
+        """Core tool dispatch logic (no event emission)."""
         method = getattr(self, tool_name, None)
         if method is None or not hasattr(method, "_tool_description"):
             return {"error": f"Unknown tool: {tool_name}"}
@@ -86,11 +124,8 @@ class AgentTools(
         schema = getattr(method, "_tool_args_schema", None)
         try:
             if schema is None:
-                # Tool takes no arguments — ignore anything the LLM sent
                 return method()
             else:
-                # Validate through Pydantic, which strips unknown fields
-                # and raises on missing required fields
                 validated = schema(**arguments)
                 return method(**validated.model_dump())
         except Exception as e:

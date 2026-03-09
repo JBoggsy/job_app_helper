@@ -29,7 +29,6 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import logging
-from collections.abc import Generator
 
 import dspy
 
@@ -257,7 +256,7 @@ class EditCoverLetterWorkflow(BaseWorkflow):
 
     # -- Main run -----------------------------------------------------------
 
-    def run(self) -> Generator[dict, None, WorkflowResult]:
+    def run(self) -> WorkflowResult:
         user_message = self.outcome_description or self.params.get("user_message", "")
         conversation_context = self.params.get("conversation_context", "")
         cover_letter = self.params.get("cover_letter", "")
@@ -269,7 +268,7 @@ class EditCoverLetterWorkflow(BaseWorkflow):
         )
         if not job:
             msg = "I need to know which job this cover letter is for. Please specify the job.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -278,10 +277,7 @@ class EditCoverLetterWorkflow(BaseWorkflow):
             )
 
         job_label = f"{job['title']} at {job['company']}"
-        yield {
-            "event": "text_delta",
-            "data": {"content": f"Targeting: **{job_label}**\n\n"},
-        }
+        self.event_bus.emit("text_delta", {"content": f"Targeting: **{job_label}**\n\n"})
 
         # 2. Load cover letter from params or DB
         if not cover_letter:
@@ -292,14 +288,11 @@ class EditCoverLetterWorkflow(BaseWorkflow):
             if "error" not in doc_resp:
                 cover_letter = doc_resp["document"]["content"]
                 v = doc_resp["document"]["version"]
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": f"Loaded saved cover letter (v{v}).\n\n"},
-                }
+                self.event_bus.emit("text_delta", {"content": f"Loaded saved cover letter (v{v}).\n\n"})
 
         if not cover_letter:
             msg = "No cover letter found. Please paste the cover letter you'd like me to edit.\n"
-            yield {"event": "text_delta", "data": {"content": msg}}
+            self.event_bus.emit("text_delta", {"content": msg})
             return WorkflowResult(
                 outcome_id=self.outcome_id,
                 success=False,
@@ -311,7 +304,7 @@ class EditCoverLetterWorkflow(BaseWorkflow):
         user_context = load_user_context(self.tools)
 
         # 4. Three parallel analysis passes
-        yield {"event": "text_delta", "data": {"content": "Analysing your cover letter...\n"}}
+        self.event_bus.emit("text_delta", {"content": "Analysing your cover letter...\n"})
         lm = build_lm(self.llm_config)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
@@ -336,13 +329,10 @@ class EditCoverLetterWorkflow(BaseWorkflow):
                     analysis_results[name] = {}
                 else:
                     analysis_results[name] = future.result()
-                yield {
-                    "event": "text_delta",
-                    "data": {"content": f"  {name} analysis complete\n"},
-                }
+                self.event_bus.emit("text_delta", {"content": f"  {name} analysis complete\n"})
 
         # 5. Synthesize critique
-        yield {"event": "text_delta", "data": {"content": "\nSynthesising findings...\n\n"}}
+        self.event_bus.emit("text_delta", {"content": "\nSynthesising findings...\n\n"})
 
         synthesizer = dspy.ChainOfThought(SynthesizeCritiqueSig)
         with dspy.context(lm=lm):
@@ -359,20 +349,17 @@ class EditCoverLetterWorkflow(BaseWorkflow):
                 cover_letter=cover_letter,
             )
 
-        yield {
-            "event": "text_delta",
-            "data": {
-                "content": (
-                    f"## Cover Letter Analysis\n\n"
-                    f"{synthesis.overall_assessment}\n\n"
-                    f"### Suggested Improvements\n\n"
-                    f"{synthesis.critique}\n\n"
-                ),
-            },
-        }
+        self.event_bus.emit("text_delta", {
+            "content": (
+                f"## Cover Letter Analysis\n\n"
+                f"{synthesis.overall_assessment}\n\n"
+                f"### Suggested Improvements\n\n"
+                f"{synthesis.critique}\n\n"
+            ),
+        })
 
         # 6. Revise the letter
-        yield {"event": "text_delta", "data": {"content": "Applying improvements...\n\n"}}
+        self.event_bus.emit("text_delta", {"content": "Applying improvements...\n\n"})
 
         reviser = dspy.ChainOfThought(ReviseLetterSig)
         with dspy.context(lm=lm):
@@ -397,20 +384,17 @@ class EditCoverLetterWorkflow(BaseWorkflow):
 
         # 8. Stream revised letter and changes
         changes_text = "\n".join(f"- {c}" for c in revision.changes_applied)
-        yield {
-            "event": "text_delta",
-            "data": {
-                "content": (
-                    f"---\n\n"
-                    f"## Revised Cover Letter{version_info}\n\n"
-                    f"{revision.revised_letter}\n\n"
-                    f"---\n\n"
-                    f"### Changes Applied\n\n"
-                    f"{changes_text}\n\n"
-                    f"*{revision.edit_summary}*\n"
-                ),
-            },
-        }
+        self.event_bus.emit("text_delta", {
+            "content": (
+                f"---\n\n"
+                f"## Revised Cover Letter{version_info}\n\n"
+                f"{revision.revised_letter}\n\n"
+                f"---\n\n"
+                f"### Changes Applied\n\n"
+                f"{changes_text}\n\n"
+                f"*{revision.edit_summary}*\n"
+            ),
+        })
 
         summary = f"Critiqued and revised cover letter for {job_label}{version_info}."
 

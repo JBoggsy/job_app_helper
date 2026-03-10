@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { fetchJobs, createJob, updateJob, deleteJob } from "../api";
 import JobForm from "../components/JobForm";
-import JobDetailPanel from "../components/JobDetailPanel";
+import { useAppContext } from "../contexts/AppContext";
 
 const STATUS_COLORS = {
   saved: "bg-gray-100 text-gray-700",
@@ -26,7 +27,6 @@ const SORTABLE_COLUMNS = [
 
 function compareJobs(a, b, column, direction) {
   let valA, valB;
-
   if (column === "status") {
     valA = STATUS_ORDER[a.status] ?? 99;
     valB = STATUS_ORDER[b.status] ?? 99;
@@ -43,23 +43,24 @@ function compareJobs(a, b, column, direction) {
     valA = (a[column] ?? "").toString().toLowerCase();
     valB = (b[column] ?? "").toString().toLowerCase();
   }
-
   if (valA < valB) return direction === "asc" ? -1 : 1;
   if (valA > valB) return direction === "asc" ? 1 : -1;
   return 0;
 }
 
-export default function JobList({ refreshVersion, showForm, onFormClose }) {
+export default function JobTrackerPage() {
+  const navigate = useNavigate();
+  const { jobsVersion } = useAppContext();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingJob, setEditingJob] = useState(null);
-  const [selectedJob, setSelectedJob] = useState(null);
+  const [showForm, setShowForm] = useState(false);
   const [sortColumn, setSortColumn] = useState("created_at");
   const [sortDirection, setSortDirection] = useState("desc");
 
   useEffect(() => {
     loadJobs();
-  }, [refreshVersion]);
+  }, [jobsVersion]);
 
   async function loadJobs() {
     try {
@@ -72,7 +73,7 @@ export default function JobList({ refreshVersion, showForm, onFormClose }) {
 
   async function handleCreate(data) {
     await createJob(data);
-    onFormClose();
+    setShowForm(false);
     loadJobs();
   }
 
@@ -106,24 +107,29 @@ export default function JobList({ refreshVersion, showForm, onFormClose }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-800">
+        <h1 className="text-2xl font-bold text-gray-900">
           Applications ({jobs.length})
-        </h2>
+        </h1>
+        <button
+          onClick={() => setShowForm(true)}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add Job
+        </button>
       </div>
 
       {showForm && (
         <div className="mb-6">
-          <JobForm onSubmit={handleCreate} onCancel={onFormClose} />
+          <JobForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
         </div>
       )}
 
       {editingJob && (
         <div className="mb-6">
-          <JobForm
-            initialData={editingJob}
-            onSubmit={handleUpdate}
-            onCancel={() => setEditingJob(null)}
-          />
+          <JobForm initialData={editingJob} onSubmit={handleUpdate} onCancel={() => setEditingJob(null)} />
         </div>
       )}
 
@@ -145,9 +151,9 @@ export default function JobList({ refreshVersion, showForm, onFormClose }) {
                     <span className="inline-flex items-center gap-1">
                       {label}
                       {sortColumn === key ? (
-                        <span className="text-blue-600">{sortDirection === "asc" ? "▲" : "▼"}</span>
+                        <span className="text-blue-600">{sortDirection === "asc" ? "\u25B2" : "\u25BC"}</span>
                       ) : (
-                        <span className="text-gray-300">⇅</span>
+                        <span className="text-gray-300">\u21C5</span>
                       )}
                     </span>
                   </th>
@@ -159,83 +165,54 @@ export default function JobList({ refreshVersion, showForm, onFormClose }) {
               {sortedJobs.map((job) => (
                 <tr
                   key={job.id}
-                  onClick={() => setSelectedJob(job)}
+                  onClick={() => navigate(`/jobs/${job.id}`)}
                   className="hover:bg-gray-50 cursor-pointer"
                 >
                   <td className="px-4 py-3 font-medium text-gray-900">
                     {job.url ? (
-                      <a
-                        href={job.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-blue-600 hover:underline"
-                      >
+                      <a href={job.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-blue-600 hover:underline">
                         {job.company}
                       </a>
-                    ) : (
-                      job.company
-                    )}
+                    ) : job.company}
                   </td>
                   <td className="px-4 py-3 text-gray-700">{job.title}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">
                     {job.location && <span>{job.location}</span>}
-                    {job.remote_type && (
-                      <span className="ml-1 text-xs text-gray-400">({job.remote_type})</span>
-                    )}
+                    {job.remote_type && <span className="ml-1 text-xs text-gray-400">({job.remote_type})</span>}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">
                     {job.salary_min || job.salary_max
-                      ? `${job.salary_min ? `$${job.salary_min.toLocaleString()}` : "?"}–${job.salary_max ? `$${job.salary_max.toLocaleString()}` : "?"}`
+                      ? `${job.salary_min ? `$${job.salary_min.toLocaleString()}` : "?"}\u2013${job.salary_max ? `$${job.salary_max.toLocaleString()}` : "?"}`
                       : ""}
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${STATUS_COLORS[job.status] ?? ""}`}
-                    >
+                    <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${STATUS_COLORS[job.status] ?? ""}`}>
                       {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-amber-500 text-sm whitespace-nowrap">
-                    {job.job_fit != null && (
-                      <>{"★".repeat(job.job_fit)}{"☆".repeat(5 - job.job_fit)}</>
-                    )}
+                    {job.job_fit != null && <>{"\u2605".repeat(job.job_fit)}{"\u2606".repeat(5 - job.job_fit)}</>}
                   </td>
                   <td className="px-4 py-3">
                     {job.tags && (
                       <div className="flex flex-wrap gap-1">
                         {job.tags.split(",").map((tag) => tag.trim()).filter(Boolean).map((tag) => (
-                          <span key={tag} className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
-                            {tag}
-                          </span>
+                          <span key={tag} className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">{tag}</span>
                         ))}
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {new Date(job.created_at).toLocaleDateString()}
-                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-500">{new Date(job.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedJob(null);
-                          setEditingJob(job);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); setEditingJob(job); }}
                         className="text-sm text-blue-600 hover:underline"
-                      >
-                        Edit
-                      </button>
+                      >Edit</button>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(job.id);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); handleDelete(job.id); }}
                         className="text-sm text-red-600 hover:underline"
-                      >
-                        Delete
-                      </button>
+                      >Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -244,16 +221,6 @@ export default function JobList({ refreshVersion, showForm, onFormClose }) {
           </table>
         </div>
       )}
-
-      <JobDetailPanel
-        job={selectedJob}
-        isOpen={!!selectedJob}
-        onClose={() => setSelectedJob(null)}
-        onEdit={(job) => {
-          setSelectedJob(null);
-          setEditingJob(job);
-        }}
-      />
     </div>
   );
 }

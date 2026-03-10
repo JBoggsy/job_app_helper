@@ -327,3 +327,32 @@ export async function parseResumeWithLLM() {
   if (!res.ok) throw new Error(data.error || "Failed to parse resume");
   return data;
 }
+
+// Job Documents API
+
+export async function fetchJobDocument(jobId, docType) {
+  const res = await fetch(`${BASE}/${jobId}/documents?type=${encodeURIComponent(docType)}`);
+  if (!res.ok) throw new Error("Failed to fetch document");
+  return res.json();
+}
+
+export async function fetchDocumentHistory(jobId, docType) {
+  const res = await fetch(`${BASE}/${jobId}/documents/history?type=${encodeURIComponent(docType)}`);
+  if (!res.ok) throw new Error("Failed to fetch document history");
+  return res.json();
+}
+
+export async function saveJobDocument(jobId, docType, content, editSummary) {
+  const res = await fetch(`${BASE}/${jobId}/documents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ doc_type: docType, content, edit_summary: editSummary }),
+  });
+  if (!res.ok) throw new Error("Failed to save document");
+  return res.json();
+}
+
+export async function deleteJobDocument(jobId, docId) {
+  const res = await fetch(`${BASE}/${jobId}/documents/${docId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete document");
+}

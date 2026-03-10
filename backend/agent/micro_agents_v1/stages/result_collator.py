@@ -40,6 +40,9 @@ Your job is to produce a single, natural-language response that:
   pad with unnecessary filler either.
 - If any outcomes failed, acknowledge the failure and explain what
   went wrong in user-friendly terms.
+- If the user's profile is provided, you already know their
+  preferences, background, and goals — do NOT ask them to supply
+  information that is already in their profile.
 """
 
 
@@ -117,6 +120,7 @@ class ResultCollator:
         results: list[WorkflowResult],
         user_message: str,
         assignments: list[WorkflowAssignment] | None = None,
+        user_profile: str | None = None,
     ) -> str:
         """Synthesise workflow results into a streamed user response.
 
@@ -130,6 +134,8 @@ class ResultCollator:
             assignments: Optional workflow assignments — when provided,
                 each result is annotated with its workflow name and
                 output schema for better collation.
+            user_profile: Optional user profile text (skills,
+                preferences, experience).
 
         Returns:
             The full accumulated response text.
@@ -142,15 +148,16 @@ class ResultCollator:
 
         formatted = self._format_results(results, assignments)
 
+        user_content = (
+            f"**User's original message:**\n{user_message}\n\n"
+            f"**Workflow results:**\n{formatted}"
+        )
+        if user_profile:
+            user_content += f"\n\n**User profile:**\n{user_profile}"
+
         messages = [
             {"role": "system", "content": _COLLATION_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": (
-                    f"**User's original message:**\n{user_message}\n\n"
-                    f"**Workflow results:**\n{formatted}"
-                ),
-            },
+            {"role": "user", "content": user_content},
         ]
 
         response = litellm.completion(

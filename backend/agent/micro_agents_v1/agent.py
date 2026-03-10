@@ -160,7 +160,8 @@ class MicroAgentsV1Agent(Agent):
 
         # --- Stage 4: Result Collation ---
         collated_text = self.result_collator.collate(
-            results, user_message, assignments=assignments
+            results, user_message, assignments=assignments,
+            user_profile=user_profile,
         )
         full_text += collated_text
 

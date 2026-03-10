@@ -20,9 +20,8 @@
 
 ## Features
 
-- [ ] **Job application preparation (phase 2)**
-  - Interview prep, resume tailoring, cover letter draft generation
-  - Agent tools to generate and manage prep content
+- [x] **Job application preparation (phase 2)** — Document editor with Tiptap, agent co-editing via SSE, version history
+- [ ] **Interview prep** — agent-assisted interview preparation workflows
 
 ## Desktop App
 

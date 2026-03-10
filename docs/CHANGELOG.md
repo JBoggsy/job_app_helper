@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Page-based UI architecture** — Migrated from slide-out panels to dedicated pages using React Router. New pages: `HomePage` (dashboard with stats), `JobTrackerPage`, `JobDetailPage`, `DocumentEditorPage`, `SettingsPage`, `ProfilePage`, `HelpPage`. Only ChatPanel remains as an overlay. Shared state moved to `AppContext`.
+- **Rich text document editor** — New `DocumentEditorPage` with Tiptap 2 rich text editor for side-by-side document editing alongside the AI chat panel. Features: formatting toolbar (bold, italic, headings, lists, blockquote, undo/redo), version history sidebar with view/restore, Ctrl+S save shortcut, copy-to-clipboard.
+- **Real-time agent → editor sync** — Backend `save_job_document` tool now emits a `document_saved` SSE event. ChatPanel forwards it via AppContext pub/sub to DocumentEditorPage, which auto-refreshes content and version history when the agent saves a new document version.
+- **Navigation bar** — New `NavigationBar` component with `NavLink` route links and active page indicator, replacing the old header with icon buttons.
+- **AppContext** — Centralized shared state context replacing prop-drilling through App.jsx. Manages chat open/close, onboarding state, jobs version counter, toast notifications, error handling, and document saved pub/sub.
+- **Document API functions** — Added `fetchJobDocument`, `fetchDocumentHistory`, `saveJobDocument`, `deleteJobDocument` to `api.js`.
+- **Code splitting** — `DocumentEditorPage` (Tiptap) is lazy-loaded via `React.lazy()` + `Suspense` to keep the main bundle small.
+
 ### Changed
 - **EventBus SSE migration** — Replaced ad-hoc SSE streaming (`yield` statements, `_pending_events` buffers, `event_callback` callbacks) with a unified `EventBus` pattern. All SSE events now flow through a thread-safe queue. Agent `run()` methods spawn worker threads and drain the bus. `AgentTools.execute()` auto-emits `tool_start`/`tool_result`/`tool_error` events. Workflow `run()` methods converted from generators to plain methods returning `WorkflowResult`. Deleted `run_dspy_module_streaming()`. Net ~165 lines removed.
+
+### Removed
+- **Slide-out panels** — Deleted `SettingsPanel.jsx`, `ProfilePanel.jsx`, `HelpPanel.jsx`, `JobDetailPanel.jsx`, and `pages/JobList.jsx`; replaced by dedicated page components.
 
 ## [0.11.0] - 2026-03-09
 

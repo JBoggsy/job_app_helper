@@ -14,7 +14,7 @@ Available as a downloadable desktop app (via Tauri — the primary distribution 
 - **LLM providers:** Anthropic, OpenAI, Google Gemini, Ollama (configurable via Settings UI or env vars) — unified via LiteLLM `completion()` API
 - **Agent tools:** Tavily search API, cloudscraper + BeautifulSoup web scraping (with Tavily Extract fallback), RapidAPI job search (JSearch, Active Jobs DB, LinkedIn Job Search)
 - **Agent framework:** DSPy (declarative self-improving language programs) — used by the `micro_agents_v1` design for structured reasoning stages and ReAct workflows
-- **Frontend:** React 19, Vite, Tailwind CSS 4
+- **Frontend:** React 19, React Router 7, Vite, Tailwind CSS 4, Tiptap 2 (rich text editor)
 - **Desktop wrapper:** Tauri v2 (sidecar approach — Flask as child process, React in native webview)
 - **Package management:** uv (Python), npm (JS)
 
@@ -133,19 +133,25 @@ lsof -ti:5000 | xargs kill -9 2>/dev/null
 
 ### Frontend
 - `frontend/vite.config.js` — Vite config (React plugin, Tailwind CSS plugin, API proxy, Tauri-compatible settings)
-- `frontend/src/main.jsx` — React entry point
-- `frontend/src/index.css` — Tailwind CSS base import
-- `frontend/src/App.jsx` — App shell with sticky header (always visible at top), "+Add Job" button in header bar, layout, settings auto-open, onboarding auto-start, and Tauri external link interceptor (opens http/https/mailto links in system browser)
-- `frontend/src/api.js` — API helper with `getApiBase()` for Tauri URL resolution (`fetchJobs`, `createJob`, `updateJob`, `deleteJob`, chat functions, `streamMessage`, `fetchProfile`, `updateProfile`, config functions, onboarding functions, resume functions)
-- `frontend/src/pages/JobList.jsx` — Main dashboard: job table with status badges, edit/delete; add form triggered via `showForm`/`onFormClose` props from App
+- `frontend/src/main.jsx` — React entry point; wraps app in `<BrowserRouter>` and `<AppProvider>`
+- `frontend/src/index.css` — Tailwind CSS base import, markdown chat bubble styles, Tiptap editor styles
+- `frontend/src/App.jsx` — App shell with `<Routes>` (React Router), `<NavigationBar>`, setup wizard, onboarding auto-start, and Tauri external link interceptor. Routes: `/` (HomePage), `/jobs` (JobTrackerPage), `/jobs/:id` (JobDetailPage), `/jobs/:id/documents/:type` (DocumentEditorPage, lazy-loaded), `/settings`, `/profile`, `/help`. Only ChatPanel remains as an overlay panel; all other UI is page-based.
+- `frontend/src/contexts/AppContext.jsx` — Central shared state context (`AppProvider`, `useAppContext`). Provides: `chatOpen`/`setChatOpen`, `onboarding`/`setOnboarding`, `jobsVersion`/`bumpJobsVersion`, `toasts`/`addToast`/`removeToast`, `handleChatError`, `notifyDocumentSaved`/`onDocumentSaved` (pub/sub for agent document save events)
+- `frontend/src/api.js` — API helper with `getApiBase()` for Tauri URL resolution (`fetchJobs`, `createJob`, `updateJob`, `deleteJob`, chat functions, `streamMessage`, `fetchProfile`, `updateProfile`, config functions, onboarding functions, resume functions, `fetchJobDocument`, `fetchDocumentHistory`, `saveJobDocument`, `deleteJobDocument`)
+- `frontend/src/pages/HomePage.jsx` — Dashboard with job stats cards (total, applied, interviewing, offers), AI config status, recent jobs list, and quick action buttons
+- `frontend/src/pages/JobTrackerPage.jsx` — Full job table with status badges, sort, "Add Job" button, row click navigates to `/jobs/:id`
+- `frontend/src/pages/JobDetailPage.jsx` — Full page for a single job: todos, requirements, notes, tags, contact info, and Documents section with links to cover letter/resume editors
+- `frontend/src/pages/DocumentEditorPage.jsx` — Side-by-side document editor page with Tiptap rich text editor, formatting toolbar, version history sidebar, save/copy/AI assistant buttons, Ctrl+S shortcut. Subscribes to agent `document_saved` events via `onDocumentSaved` for real-time refresh.
+- `frontend/src/pages/SettingsPage.jsx` — Full page for LLM provider, API keys, agent mode, and integration configuration
+- `frontend/src/pages/ProfilePage.jsx` — Full page for user profile viewer/editor with resume upload and structured resume view
+- `frontend/src/pages/HelpPage.jsx` — Full page with Getting Started, Job Tracking, AI Chat, API Key Guides, and Troubleshooting sections
+- `frontend/src/components/NavigationBar.jsx` — Top nav bar with `<NavLink>` route links (Home, Jobs, Profile, Settings, Help) and AI Assistant chat toggle button; active page indicator via NavLink styling
+- `frontend/src/components/DocumentEditor.jsx` — Tiptap rich text editor wrapper with formatting toolbar (bold, italic, H1-H3, bullet/ordered lists, blockquote, horizontal rule, undo/redo). Accepts `content` prop and `onUpdate` callback; handles external content updates without cursor jumps.
 - `frontend/src/components/JobForm.jsx` — Reusable form for creating and editing jobs
-- `frontend/src/components/ChatPanel.jsx` — Slide-out AI assistant chat panel with SSE streaming; manages search results state and renders SearchResultsPanel alongside chat when results exist
+- `frontend/src/components/ChatPanel.jsx` — Slide-out AI assistant chat panel with SSE streaming; manages search results state and renders SearchResultsPanel alongside chat when results exist. Handles `document_saved` SSE events and forwards them via `notifyDocumentSaved` to AppContext.
 - `frontend/src/components/SearchResultsPanel.jsx` — Slide-out panel displaying job search results with collapsible cards, star ratings, fit reasons, "Add to Tracker" buttons; appears to the right of ChatPanel during/after job searches
-- `frontend/src/components/ProfilePanel.jsx` — Slide-out user profile viewer/editor panel with resume upload section (PDF/DOCX)
-- `frontend/src/components/SettingsPanel.jsx` — Slide-out settings panel for configuring LLM provider, API keys, and onboarding agent; includes `ApiKeyGuide` sub-component that renders expandable step-by-step instructions + direct links for each key field (Anthropic, OpenAI, Gemini, Tavily, RapidAPI); Ollama renders nothing (no key needed)
-- `frontend/src/components/SetupWizard.jsx` — First-time setup wizard (centered modal, 5 steps: welcome → provider selection → API key entry with inline how-to guide + test connection → integration keys (Tavily + RapidAPI) with inline how-to guides → done); auto-opens for new users instead of Settings panel; calls `onComplete()` to launch onboarding chat or `onClose()` to dismiss; `pendingOnboarding` stays true on dismiss so the Settings manual-save path still triggers onboarding
+- `frontend/src/components/SetupWizard.jsx` — First-time setup wizard (centered modal, 5 steps: welcome → provider selection → API key entry with inline how-to guide + test connection → integration keys (Tavily + RapidAPI) with inline how-to guides → done); auto-opens for new users instead of Settings page; calls `onComplete()` to launch onboarding chat or `onClose()` to dismiss
 - `frontend/src/components/ModelCombobox.jsx` — Searchable combobox for model selection; fetches available models from provider API, with client-side cache (5-min TTL) and graceful fallback to free-text input on error
-- `frontend/src/components/HelpPanel.jsx` — Slide-out help panel with Getting Started, Job Tracking, AI Chat, API Key Guides, and Troubleshooting sections
 - `frontend/src/components/UpdateBanner.jsx` — Auto-update notification banner (Tauri desktop only); shows version info, download progress, and restart button
 - `frontend/src/components/Toast.jsx` — Toast notification system (`useToast` hook, `ToastContainer` component); used for error notifications with collapsible technical details
 - `frontend/src/utils/errorClassifier.js` — Maps raw LLM/network error strings to user-friendly toast messages with actionable guidance (`classifyError`, `classifyNetworkError`)
@@ -213,7 +219,7 @@ Optional job fields: `salary_min` (int), `salary_max` (int), `location` (string)
 
 **Primary method:** `config.json` file (auto-created in project root)
 
-Users configure the app through the **Settings UI** (accessed via the gear icon in the top navigation). The Settings panel allows users to:
+Users configure the app through the **Settings page** (accessed via the Settings link in the navigation bar). The Settings page allows users to:
 - Select LLM provider (Anthropic, OpenAI, Gemini, Ollama)
 - Enter API keys
 - Override default models
@@ -292,6 +298,7 @@ Environment variables are checked first, then `config.json`. Useful for developm
 - `done` — `{"content": "full text"}` — agent finished
 - `onboarding_complete` — `{}` — onboarding interview finished (only in onboarding flow)
 - `search_result_added` — full `SearchResult` dict — emitted by the `add_search_result` tool; opens the results panel and adds the entry in real time
+- `document_saved` — `{"document": {...}, "job_id": int, "doc_type": "..."}` — emitted by `save_job_document` tool; triggers real-time refresh in `DocumentEditorPage` via AppContext pub/sub
 - `error` — `{"message": "..."}` — fatal error
 
 ## Conventions
@@ -299,10 +306,10 @@ Environment variables are checked first, then `config.json`. Useful for developm
 ### Configuration & Startup
 - Use `./start.sh` (Mac/Linux) or `start.bat` (Windows) to start the app — these scripts handle everything automatically
 - Configuration is stored in `config.json` in the project root (auto-created, gitignored)
-- Users configure LLM and integrations through the **Settings UI** (gear icon in nav bar)
-- Settings panel auto-opens on first launch if LLM is not configured
+- Users configure LLM and integrations through the **Settings page** (accessible via nav bar)
+- Setup wizard auto-opens on first launch if LLM is not configured
 - Environment variables can override `config.json` values (useful for development/deployment)
-- The `/api/health` endpoint returns 503 if LLM is not configured (used by frontend to trigger settings panel)
+- The `/api/health` endpoint returns 503 if LLM is not configured (used by frontend to trigger setup wizard)
 
 ### Data Files & Storage
 - All data files are resolved via `backend/data_dir.get_data_dir()` — defaults to project root, overridden by `DATA_DIR` env var
@@ -312,7 +319,7 @@ Environment variables are checked first, then `config.json`. Useful for developm
 - User profile uses YAML frontmatter for metadata (`onboarded: false/in_progress/true`); body is markdown
 
 ### User Onboarding Flow
-- On first visit, if LLM is not configured, Settings panel auto-opens
+- On first visit, if LLM is not configured, setup wizard auto-opens
 - After saving settings, if user hasn't been onboarded, the onboarding interview auto-starts
 - Onboarding uses a separate LLM config (`onboarding_llm.*` in `config.json`) so a cheaper model can be used
 - The AI agent interviews the user and fills their profile via the `update_user_profile` tool
@@ -327,7 +334,9 @@ Environment variables are checked first, then `config.json`. Useful for developm
 - Frontend Vite dev server proxies `/api` to Flask at `localhost:5000`
 - Frontend pages live in `frontend/src/pages/`, reusable components in `frontend/src/components/`
 - API helper functions in `frontend/src/api.js` — all backend calls go through this module
-- **Live job list refresh:** `ChatPanel` has a `JOB_MUTATING_TOOLS` set that tracks which agent tools modify job data (currently `create_job`, `edit_job`, `remove_job`). When a `tool_result` SSE event fires for one of these tools, the panel calls `onJobsChanged()` which bumps a `jobsVersion` counter in `App`, causing `JobList` to re-fetch. **When adding a new agent tool that creates, updates, or deletes jobs, add its name to `JOB_MUTATING_TOOLS` in `frontend/src/components/ChatPanel.jsx`.**
+- **Page-based architecture with React Router:** UI uses `react-router-dom` for client-side routing. Pages in `frontend/src/pages/`, shared components in `frontend/src/components/`. Only ChatPanel remains as an overlay; all other views (settings, profile, help, job detail, document editor) are dedicated pages. Shared state lives in `AppContext`.
+- **Live job list refresh:** `ChatPanel` has a `JOB_MUTATING_TOOLS` set that tracks which agent tools modify job data (currently `create_job`, `edit_job`, `remove_job`, `save_job_document`). When a `tool_result` SSE event fires for one of these tools, the panel calls `bumpJobsVersion()` in `AppContext`, causing `JobTrackerPage` to re-fetch. **When adding a new agent tool that creates, updates, or deletes jobs, add its name to `JOB_MUTATING_TOOLS` in `frontend/src/components/ChatPanel.jsx`.**
+- **Real-time document editor refresh:** When the agent saves a document via `save_job_document`, a `document_saved` SSE event is emitted. `ChatPanel` handles it and calls `notifyDocumentSaved()` in `AppContext`. `DocumentEditorPage` subscribes via `onDocumentSaved()` to reload the editor content and version history in real time.
 - **Job search results panel:** When the main agent calls `add_search_result`, a `search_result_added` SSE event is emitted and ChatPanel handles it to populate a `SearchResultsPanel` alongside the chat. Results accumulate in real time as the agent adds them. Results persist per-conversation in the `search_results` DB table and are loaded when opening historical conversations. "Add to Tracker" promotes a `SearchResult` to a `Job` record and refreshes the job list.
 
 ## Best Practices

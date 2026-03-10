@@ -99,6 +99,19 @@ def _rapidapi_request(url, api_key, host, params, *, max_retries=3, timeout=30):
     raise requests.exceptions.ConnectionError(f"Failed after {max_retries + 1} attempts to {host}")
 
 
+def _check_rapidapi_error(data):
+    """Check if a RapidAPI JSON response is an error/unsubscribed message.
+
+    Some RapidAPI endpoints return HTTP 200 with a JSON body like
+    ``{"message": "You are not subscribed..."}`` instead of an HTTP
+    error code.  Detect these and raise so callers treat them as failures.
+    """
+    if isinstance(data, dict) and "message" in data and not any(
+        k in data for k in ("data", "results", "jobs")
+    ):
+        raise RuntimeError(f"RapidAPI error: {data['message']}")
+
+
 def _parse_fantastic_jobs(jobs, source_name, num_results):
     """Parse results from Fantastic.jobs APIs (Active Jobs DB / LinkedIn Job Search).
 
@@ -235,6 +248,7 @@ class JobSearchMixin:
             self.rapidapi_key, "active-jobs-db.p.rapidapi.com", params,
         )
         data = resp.json()
+        _check_rapidapi_error(data)
         jobs = data if isinstance(data, list) else data.get("data", data.get("results", []))
         return _parse_fantastic_jobs(jobs, "activejobs", num_results)
 
@@ -261,6 +275,7 @@ class JobSearchMixin:
             self.rapidapi_key, "linkedin-job-search-api.p.rapidapi.com", params,
         )
         data = resp.json()
+        _check_rapidapi_error(data)
         jobs = data if isinstance(data, list) else data.get("data", data.get("results", []))
         return _parse_fantastic_jobs(jobs, "linkedin", num_results)
 
@@ -314,7 +329,10 @@ class JobSearchMixin:
             method_name, display_name = self._PROVIDERS[prov]
             method = getattr(self, method_name)
             try:
+                logger.info("Querying %s for '%s'%s", display_name, query,
+                            f" in {location}" if location else "")
                 results = method(**search_kwargs)
+                logger.info("%s returned %d result(s)", display_name, len(results))
                 all_results.extend(results)
                 provider_used.append(prov)
             except Exception as e:

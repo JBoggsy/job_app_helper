@@ -159,8 +159,9 @@ The **General workflow** serves as the universal fallback. It runs a
 conventional ReAct loop: the LLM reasons about the outcome, selects tools,
 observes results, and iterates until the outcome is met. Any outcome that
 doesn't match a specialised workflow lands here, so the agent is never stuck.
-Tool calls within the General workflow are streamed in real-time via a shared
-event queue — see `run_dspy_module_streaming()` in `_dspy_utils.py`.
+Tool calls within the General workflow are streamed in real-time because
+`AgentTools.execute()` auto-emits `tool_start`/`tool_result`/`tool_error`
+events to the shared `EventBus`.
 
 ### Registered Workflows
 
@@ -220,9 +221,9 @@ just during the final response. Specifically:
   call and `text_delta` events for progress narration ("Searching for jobs in
   San Francisco...", "Found 12 listings, evaluating fit..."). DSPy `ReAct`
   modules (General workflow, interview prep company brief, onboarding agent)
-  stream tool events in real-time via `run_dspy_module_streaming()` — the
-  module runs in a background thread while tool shims push events to a shared
-  queue that the generator drains.
+  stream tool events in real-time because `AgentTools.execute()` auto-emits
+  events to the shared `EventBus`. The module runs in a worker thread while
+  the main thread yields from `event_bus.drain_blocking()`.
 - **Result collation** streams the final summary token-by-token via
   `litellm.completion(stream=True)` as `text_delta` events, followed by a
   `done` event.
@@ -256,10 +257,10 @@ raw markdown.
 signature rather than parsing a magic string marker. When `True`, the agent
 calls `set_onboarded(True)` and emits the `onboarding_complete` SSE event.
 
-**SSE events:** Emits `tool_start`/`tool_result` events in real-time via
-`run_dspy_module_streaming()`, `text_delta` (response text), tool-emitted
-events via the `_pending_events` callback, `onboarding_complete` (when done),
-and `done`.
+**SSE events:** Tool calls auto-emit `tool_start`/`tool_result` events in
+real-time via `AgentTools.execute()` and the shared `EventBus`. The agent also
+emits `text_delta` (response text), `onboarding_complete` (when done), and
+`done`.
 
 ---
 

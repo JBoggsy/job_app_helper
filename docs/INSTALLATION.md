@@ -127,7 +127,7 @@ If you have a powerful computer (16GB+ RAM recommended), you can run AI models l
 2. Download and install Ollama for your operating system
 3. Open a terminal and download a model:
    ```bash
-   ollama pull llama3.2
+   ollama pull llama3.1
    ```
 4. No API key needed! Just set your provider to "ollama" in the configuration.
 
@@ -163,7 +163,7 @@ For enhanced job searching, you can set up a RapidAPI key that works with multip
 
 ## First-Time Setup
 
-When you open the app for the first time, a **Setup Wizard** will appear automatically. It walks you through four steps:
+When you open the app for the first time, a **Setup Wizard** will appear automatically. It walks you through five steps:
 
 ### Step 1 — Welcome
 
@@ -187,9 +187,18 @@ The wizard shows step-by-step instructions for getting a key from the provider y
 3. Click **"Test Connection"** to verify it works — you'll see a green success message
 4. Click **"Continue →"** (only enabled after a successful test)
 
-> **Ollama users**: No key needed. Just make sure Ollama is running (`ollama serve`) with a model pulled (`ollama pull llama3.2`), then click "Test Connection".
+> **Ollama users**: No key needed. Just make sure Ollama is running (`ollama serve`) with a model pulled (`ollama pull llama3.1`), then click "Test Connection".
 
-### Step 4 — Done
+### Step 4 — Search Integrations (Optional)
+
+Optionally add API keys for enhanced features:
+
+- **Tavily Search API** — Enables web search (recommended)
+- **RapidAPI Key** — Enables job board search (JSearch, Active Jobs DB, LinkedIn)
+
+You can skip this step and add them later in Settings.
+
+### Step 5 — Done
 
 Click **"Meet Your AI Assistant →"** to go straight into the onboarding interview. Or click "Skip for now" if you want to explore the app first and do the interview later.
 
@@ -223,18 +232,18 @@ The AI will ask questions like:
 ### Editing Settings or Profile Later
 
 **To change your API keys or provider:**
-1. Click the "Settings" button (gear icon) in the top navigation
+1. Click **"Settings"** in the top navigation bar
 2. Update any fields you want to change — each key field has a collapsible **"How do I get this key?"** guide built in
 3. Click "Save Settings"
 
 **To view or edit your job search profile:**
-1. Click the "Profile" button in the top navigation
+1. Click **"Profile"** in the top navigation bar
 2. View your saved information
 3. Click "Edit Profile" to make changes
 4. Click "Save" when done
 
 **To upload your resume:**
-1. Click the "Profile" button in the top navigation
+1. Click **"Profile"** in the top navigation bar
 2. In the **Resume** section at the top, click **Upload** (or **Replace** if you already have one)
 3. Select a PDF or DOCX file from your computer
 4. The file will be parsed and stored — click **Preview** to verify the extracted text
@@ -247,11 +256,11 @@ The AI will ask questions like:
 Now that you're set up, here's how to get started:
 
 1. **Add your first job:** Click "Add Job" to manually track a position you're interested in
-2. **Try the AI assistant:** Click "Chat" and ask it to find jobs for you — try something like "Find software engineer jobs in San Francisco" or "Scrape this job posting: [paste a URL]"
+2. **Try the AI assistant:** Click the **"AI Assistant"** button in the navigation bar and ask it to find jobs for you — try something like "Find software engineer jobs in San Francisco" or "Scrape this job posting: [paste a URL]"
 3. **Track your progress:** Update job statuses as you move through the pipeline (saved → applied → interviewing → offer/rejected)
-4. **Upload your resume:** Click the Profile button and use the resume section at the top to upload a PDF or DOCX file. The AI assistant will reference your resume when evaluating job fit and searching for jobs
-5. **Manage your profile:** Click the Profile button to view or update your job preferences — the AI uses this to give you better recommendations
-6. **Get help:** Click the "?" button in the header for built-in guides and tips
+4. **Upload your resume:** Click **"Profile"** in the navigation bar and use the resume section at the top to upload a PDF or DOCX file. The AI assistant will reference your resume when evaluating job fit and searching for jobs
+5. **Manage your profile:** Click **"Profile"** in the navigation bar to view or update your job preferences — the AI uses this to give you better recommendations
+6. **Get help:** Click **"Help"** in the navigation bar for built-in guides and tips
 
 ---
 
@@ -570,7 +579,7 @@ chmod +x shortlist_*.AppImage
 **Problem:** The setup wizard doesn't appear when you first launch the app.
 
 **Solution:**
-- Click the "Settings" button (gear icon) in the top navigation bar to configure the app manually
+- Click **"Settings"** in the top navigation bar to configure the app manually
 - Try refreshing the browser page (if running from source)
 - Check the browser console for errors (press F12, click "Console" tab)
 
@@ -581,7 +590,7 @@ chmod +x shortlist_*.AppImage
 **Solution:**
 1. Make sure Ollama is installed: [ollama.com](https://ollama.com/)
 2. Start the Ollama server: `ollama serve`
-3. Pull a model: `ollama pull llama3.2`
+3. Pull a model: `ollama pull llama3.1`
 4. In Settings, select "Ollama (Local)" as your provider
 
 > **Note:** Even with the desktop app, Ollama must be running as a separate process.
@@ -623,7 +632,7 @@ Then restart the app with `./start.sh` or `start.bat`.
 
 If you run into issues not covered here:
 
-1. Check the built-in help panel (click the "?" button in the app header)
+1. Check the built-in help page (click **"Help"** in the navigation bar)
 2. Check the `logs/app.log` file for error messages (in the app folder for source installs, or in your system's app data directory for desktop installs)
 3. Open an issue on the [GitHub repository](https://github.com/JBoggsy/shortlist/issues) with:
    - Whether you're using the desktop app or running from source

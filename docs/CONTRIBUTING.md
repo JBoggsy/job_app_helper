@@ -114,7 +114,7 @@ cd shortlist
 start.bat          # Windows
 ```
 
-Then configure your LLM API key through the Settings panel (gear icon).
+Then configure your LLM API key through the Settings page (click "Settings" in the navigation bar).
 
 **Or manually** (if you want control over each component):
 

@@ -15,9 +15,12 @@ Shortlist helps you organize your job search. Track applications through the hir
 - **Job Board Integration**: Search JSearch, Active Jobs DB, and LinkedIn job boards directly from the chat
 - **User Profile System**: Personalized onboarding interview to understand your job preferences and goals
 - **Resume Upload**: Upload your resume (PDF or DOCX) so the AI assistant can reference it for job fit evaluation and recommendations. An AI agent automatically cleans up PDF extraction artifacts and structures your resume into a rich, browsable format.
+- **Document Editor**: Write and version cover letters and tailored resumes per job with a rich text editor, AI assistance, and full version history.
+- **Application Todos**: Track per-job application steps (documents, questions, assessments, references) with completion checkboxes.
 - **Rich Job Details**: Track salary ranges, location, remote type, requirements, contact info, and more
 - **Job Fit Ratings**: Rate how well each job matches your profile (0-5 stars)
 - **Guided Setup Wizard**: First-time setup walks you through choosing a provider and entering your API key, with inline step-by-step instructions for each key
+- **Agent Modes**: Switch between freeform (single ReAct agent) and orchestrated (multi-agent pipeline with workflows) modes
 - **Desktop App**: Download and install—no programming tools required. Also runs as a web app from source.
 
 ## Download
@@ -26,9 +29,9 @@ Download the latest desktop app:
 
 | Platform | Download | Alternative |
 |----------|----------|-------------|
-| **Windows** | [Shortlist_0.8.0_x64-setup.exe](https://github.com/JBoggsy/shortlist/releases/download/v0.8.0/Shortlist_0.8.0_x64-setup.exe) | [.msi installer](https://github.com/JBoggsy/shortlist/releases/download/v0.8.0/Shortlist_0.8.0_x64_en-US.msi) |
-| **macOS (Apple Silicon)** | [Shortlist_0.8.0_aarch64.dmg](https://github.com/JBoggsy/shortlist/releases/download/v0.8.0/Shortlist_0.8.0_aarch64.dmg) | |
-| **Linux** | [Shortlist_0.8.0_amd64.deb](https://github.com/JBoggsy/shortlist/releases/download/v0.8.0/Shortlist_0.8.0_amd64.deb) | [.AppImage](https://github.com/JBoggsy/shortlist/releases/download/v0.8.0/Shortlist_0.8.0_amd64.AppImage) \| [.rpm](https://github.com/JBoggsy/shortlist/releases/download/v0.8.0/Shortlist-0.8.0-1.x86_64.rpm) |
+| **Windows** | [Shortlist_0.11.1_x64-setup.exe](https://github.com/JBoggsy/shortlist/releases/download/v0.11.1/Shortlist_0.11.1_x64-setup.exe) | [.msi installer](https://github.com/JBoggsy/shortlist/releases/download/v0.11.1/Shortlist_0.11.1_x64_en-US.msi) |
+| **macOS (Apple Silicon)** | [Shortlist_0.11.1_aarch64.dmg](https://github.com/JBoggsy/shortlist/releases/download/v0.11.1/Shortlist_0.11.1_aarch64.dmg) | |
+| **Linux** | [Shortlist_0.11.1_amd64.deb](https://github.com/JBoggsy/shortlist/releases/download/v0.11.1/Shortlist_0.11.1_amd64.deb) | [.AppImage](https://github.com/JBoggsy/shortlist/releases/download/v0.11.1/Shortlist_0.11.1_amd64.AppImage) \| [.rpm](https://github.com/JBoggsy/shortlist/releases/download/v0.11.1/Shortlist-0.11.1-1.x86_64.rpm) |
 
 > See [all releases](https://github.com/JBoggsy/shortlist/releases) for older versions.
 
@@ -88,7 +91,7 @@ First-time users go through a friendly interview to build their profile.
 The easiest way to configure the AI assistant is through the Settings panel:
 
 1. **Open the app** — launch the desktop app, or go to http://localhost:3000 if running from source
-2. **Click the Settings icon** (gear icon) in the top-right header
+2. **Click "Settings"** in the top navigation bar
 3. **Choose your LLM provider** from the dropdown (Anthropic Claude, OpenAI GPT, Google Gemini, or Ollama)
 4. **Enter your API key** (if required - Ollama runs locally and doesn't need one)
 5. **Click "Test Connection"** to verify your credentials work
@@ -123,7 +126,7 @@ export LLM_MODEL=custom-model-name  # optional
 
 # Optional Integrations
 export SEARCH_API_KEY=your-tavily-key
-export JSEARCH_API_KEY=your-rapidapi-key
+export INTEGRATIONS_RAPIDAPI_KEY=your-rapidapi-key
 
 # Logging
 export LOG_LEVEL=INFO
@@ -137,14 +140,14 @@ See [`docs/config.example.json`](docs/config.example.json) for the complete conf
 2. **Enter your API key** — On first launch, a setup wizard opens automatically. Choose an AI provider, follow the inline instructions to get your API key, and test the connection before continuing
 3. **Complete onboarding** — The AI assistant will interview you to build your job search profile
 4. **Add jobs manually** — Click "Add Job" to create entries from the dashboard
-5. **Upload your resume** — Click the profile icon and upload your resume (PDF or DOCX). The AI assistant will reference it when evaluating job fit
-6. **Use the AI assistant** — Click the chat icon to open the assistant panel:
+5. **Upload your resume** — Click "Profile" in the navigation bar and upload your resume (PDF or DOCX). The AI assistant will reference it when evaluating job fit
+6. **Use the AI assistant** — Click the "AI Assistant" button in the navigation bar to open the chat panel:
    - Ask it to search for jobs: "Find software engineer jobs in San Francisco"
    - Scrape job postings: "Scrape this URL: https://example.com/job"
    - Research companies: "Search the web for info about Acme Corp"
    - The assistant will automatically add jobs to your tracker
 7. **Track your progress** — Update job statuses (saved → applied → interviewing → offer/rejected)
-8. **Manage your profile** — Click the profile icon to view or edit your job preferences
+8. **Manage your profile** — Click "Profile" in the navigation bar to view or edit your job preferences
 
 ## Troubleshooting
 
@@ -158,9 +161,9 @@ See [`docs/config.example.json`](docs/config.example.json) for the complete conf
 
 ### General Issues
 
-**"LLM is not configured"**: Click the Settings gear icon, select an LLM provider, enter your API key, and click Save Settings.
+**"LLM is not configured"**: Click "Settings" in the navigation bar, select an LLM provider, enter your API key, and click Save Settings.
 
-**Ollama connection failed**: Make sure Ollama is running separately (`ollama serve`) with a model pulled (`ollama pull llama3.2`).
+**Ollama connection failed**: Make sure Ollama is running separately (`ollama serve`) with a model pulled (`ollama pull llama3.1`).
 
 ### Run from Source Issues
 

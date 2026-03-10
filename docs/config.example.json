@@ -9,6 +9,14 @@
     "api_key": "",
     "model": ""
   },
+  "search_llm": {
+    "provider": "",
+    "api_key": "",
+    "model": ""
+  },
+  "agent": {
+    "design": "default"
+  },
   "integrations": {
     "search_api_key": "",
     "rapidapi_key": ""

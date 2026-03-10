@@ -74,41 +74,66 @@ shortlist/
 │   ├── models/
 │   │   ├── __init__.py            # Model exports
 │   │   ├── job.py                 # Job model with CRUD methods
-│   │   └── chat.py                # Conversation and Message models
-│   ├── resume_parser.py               # Resume parsing (PDF via PyMuPDF, DOCX via python-docx), parsed JSON storage
+│   │   ├── chat.py                # Conversation and Message models
+│   │   ├── search_result.py       # SearchResult model (per-conversation job search results)
+│   │   ├── job_document.py        # JobDocument model (versioned cover letters/resumes per job)
+│   │   └── application_todo.py    # ApplicationTodo model (per-job application steps)
+│   ├── resume_parser.py           # Resume parsing (PDF via PyMuPDF, DOCX via python-docx), parsed JSON storage
 │   ├── routes/
 │   │   ├── __init__.py
-│   │   ├── jobs.py                # CRUD endpoints for jobs
+│   │   ├── jobs.py                # CRUD endpoints for jobs and application todos
 │   │   ├── chat.py                # Chat endpoints with SSE streaming
 │   │   ├── profile.py             # User profile endpoints
 │   │   ├── resume.py              # Resume upload, fetch, delete, LLM parse endpoints
-│   │   └── config.py              # Config and health check endpoints
+│   │   ├── config.py              # Config and health check endpoints
+│   │   └── job_documents.py       # Per-job document version endpoints
 │   ├── llm/
 │   │   ├── llm_factory.py         # create_llm_config() — returns LLMConfig for litellm.completion()
 │   │   └── model_listing.py       # list_models() per provider, MODEL_LISTERS registry
 │   └── agent/
+│       ├── __init__.py            # Agent design selector, hot-swap, get_agent_classes()
 │       ├── base.py                # ABCs: Agent, OnboardingAgent, ResumeParser
-│       ├── tools.py               # AgentTools class with @agent_tool methods and Pydantic schemas
-│       └── user_profile.py        # User profile file management
+│       ├── event_bus.py           # Thread-safe EventBus for SSE event streaming
+│       ├── user_profile.py        # User profile file management
+│       ├── tools/                 # Agent tool implementations
+│       │   ├── __init__.py        # Tool registry exports
+│       │   ├── _registry.py       # @agent_tool decorator and registry
+│       │   ├── web_search.py      # web_search, web_research tools
+│       │   ├── job_search.py      # job_search tool (JSearch, Active Jobs, LinkedIn)
+│       │   ├── scrape_url.py      # scrape_url tool
+│       │   ├── jobs.py            # create_job, list_jobs, edit_job, remove_job, todo tools
+│       │   ├── profile.py         # read_user_profile, update_user_profile tools
+│       │   ├── resume.py          # read_resume tool
+│       │   ├── search_results.py  # add_search_result, list_search_results tools
+│       │   └── job_documents.py   # save_job_document, get_job_document tools
+│       ├── default/               # Default agent design (freeform ReAct loop)
+│       └── micro_agents_v1/       # Micro Agents v1 design (orchestrated pipeline)
 ├── frontend/
 │   ├── vite.config.js             # Vite config (React, Tailwind CSS plugin, proxy)
 │   ├── package.json
 │   └── src/
 │       ├── main.jsx               # React entry point
-│       ├── index.css              # Tailwind imports
-│       ├── App.jsx                # App shell with routing and layout
+│       ├── index.css              # Tailwind imports, chat bubble styles, Tiptap editor styles
+│       ├── App.jsx                # App shell with React Router, setup wizard, onboarding
 │       ├── api.js                 # Centralized API client
+│       ├── contexts/
+│       │   └── AppContext.jsx     # Central shared state (chat, onboarding, jobs, toasts, document events)
 │       ├── pages/
-│       │   └── JobList.jsx        # Main dashboard
+│       │   ├── HomePage.jsx       # Dashboard with stats, recent jobs, quick actions
+│       │   ├── JobTrackerPage.jsx # Full job table with sort, filter, status badges
+│       │   ├── JobDetailPage.jsx  # Single job view: todos, requirements, notes, documents
+│       │   ├── DocumentEditorPage.jsx  # Side-by-side document editor with version history
+│       │   ├── SettingsPage.jsx   # LLM provider, API keys, agent mode configuration
+│       │   ├── ProfilePage.jsx    # User profile viewer/editor with resume upload
+│       │   └── HelpPage.jsx       # Getting started, guides, and troubleshooting
 │       ├── components/
+│       │   ├── NavigationBar.jsx  # Top nav with route links and AI Assistant button
+│       │   ├── ChatPanel.jsx      # Slide-out AI assistant chat panel with SSE streaming
+│       │   ├── SearchResultsPanel.jsx  # Slide-out job search results panel
 │       │   ├── JobForm.jsx        # Create/edit job form
-│       │   ├── JobDetailPanel.jsx # Slide-out job detail viewer
-│       │   ├── ChatPanel.jsx      # AI assistant slide-out panel
-│       │   ├── ProfilePanel.jsx   # User profile slide-out panel
-│       │   ├── SettingsPanel.jsx  # Settings configuration panel (includes ApiKeyGuide sub-component)
-│       │   ├── SetupWizard.jsx    # First-time setup wizard (4-step modal)
+│       │   ├── DocumentEditor.jsx # Tiptap rich text editor wrapper with toolbar
+│       │   ├── SetupWizard.jsx    # First-time setup wizard (5-step modal)
 │       │   ├── ModelCombobox.jsx  # Searchable model selection combobox
-│       │   ├── HelpPanel.jsx      # Help panel with guides and tips
 │       │   ├── Toast.jsx          # Toast notification system (useToast hook, ToastContainer)
 │       │   └── UpdateBanner.jsx   # Auto-update notification banner (Tauri desktop only)
 │       └── utils/
@@ -182,41 +207,65 @@ shortlist/
 
 **`backend/routes/resume.py`**: Resume upload blueprint. Handles file upload (multipart/form-data), parsing, storage, retrieval, and deletion. Supports PDF and DOCX files up to 10 MB. Also provides an LLM-powered parsing endpoint (`POST /api/resume/parse`) that uses `ResumeParser` to clean up raw extracted text and structure it into JSON. Mounted at `/api/resume`.
 
+**`backend/routes/job_documents.py`**: Job documents blueprint for versioned per-job documents (cover letters, resumes). Mounted at `/api/jobs/:id/documents`.
+
 **`backend/resume_parser.py`**: Resume parsing utilities. Extracts plain text from PDF files (via PyMuPDF) and DOCX files (via python-docx, including table content). Provides file save/load/delete helpers with resume files stored in a `resumes/` subdirectory under the data dir. Also stores LLM-parsed structured JSON (`save_parsed_resume`, `get_parsed_resume`, `delete_parsed_resume`).
 
 **`backend/llm/llm_factory.py`**: `create_llm_config(provider_name, api_key, model)` factory function that returns an `LLMConfig` dataclass used by `litellm.completion()` for any supported provider (Anthropic, OpenAI, Gemini, Ollama).
 
 **`backend/llm/model_listing.py`**: `list_models(provider_name, api_key)` functions for each provider (uses raw SDKs to query available models). Includes `MODEL_LISTERS` registry mapping provider names to their listing functions.
 
-**`backend/agent/base.py`**: Abstract base classes defining the agent interfaces: `Agent` (main chat agent), `OnboardingAgent` (profile interview), `ResumeParser` (non-streaming resume JSON extraction). These ABCs specify the constructor signatures and abstract methods (`run()` for agents, `parse()` for resume parser) that concrete implementations must satisfy. Routes import from here.
+**`backend/agent/base.py`**: Abstract base classes defining the agent interfaces: `Agent` (main chat agent), `OnboardingAgent` (profile interview), `ResumeParser` (non-streaming resume JSON extraction). These ABCs use a combined metaclass to inherit from both `ABC` and `dspy.Module`. The constructor signatures and abstract methods (`run()` for agents, `parse()` for resume parser) that concrete implementations must satisfy.
 
-**`backend/agent/tools.py`**: Defines the `AgentTools` class with `@agent_tool`-decorated methods for all available tools (`web_search`, `job_search`, `scrape_url`, `create_job`, `list_jobs`, `edit_job`, `remove_job`, `read_user_profile`, `update_user_profile`, `read_resume`, `run_job_search`, `add_search_result`, `list_search_results`). Includes Pydantic input schemas for each tool, `execute()` for dispatching tool calls by name, and `get_tool_definitions()` for returning tool metadata. Agent implementations convert Pydantic schemas to OpenAI function-calling format via `.model_json_schema()`.
+**`backend/agent/__init__.py`**: Agent design selector and hot-swap support. Provides `get_agent_classes(design_name=None)` which resolves the active design at call time from `agent.design` in config. Supports both raw design names (`default`, `micro_agents_v1`) and mode aliases (`freeform`, `orchestrated`). Also exports `DESIGN_MODES` and `MODE_TO_DESIGN` mappings.
+
+**`backend/agent/event_bus.py`**: Thread-safe `EventBus` class (backed by `queue.Queue`) used by all agents to stream SSE events. Methods: `emit(event_type, data)`, `drain_blocking()`, `close()`.
+
+**`backend/agent/tools/`**: Agent tool implementations split across multiple modules. Each tool is decorated with `@agent_tool` and has a colocated Pydantic input schema. The `_registry.py` module provides the decorator and `get_tool_definitions()` / `execute()` dispatch. Tools auto-emit `tool_start`/`tool_result`/`tool_error` events to the `EventBus`.
 
 **`backend/agent/user_profile.py`**: User profile file management with YAML frontmatter parsing. Handles reading, writing, and onboarding status checking.
 
+**`backend/agent/default/`**: Default agent design (freeform mode): monolithic ReAct loop using `litellm.completion()` with streaming and OpenAI-format tool calling.
+
+**`backend/agent/micro_agents_v1/`**: Micro Agents v1 design (orchestrated mode): workflow-orchestrated pipeline using DSPy modules. Decomposes user requests into outcomes → maps to workflows → executes in dependency order → collates results. Extensible workflow system with 12+ registered workflows.
+
 #### Frontend
 
-**`frontend/src/main.jsx`**: React entry point that mounts `App`.
+**`frontend/src/main.jsx`**: React entry point that mounts `App` inside `BrowserRouter` and `AppProvider`.
 
-**`frontend/src/App.jsx`**: App shell with header navigation, layout, onboarding auto-start logic, and setup wizard management. Manages global state like `jobsVersion` for triggering list refreshes. On first launch, opens `SetupWizard` instead of Settings if the LLM is unconfigured and the user hasn't been onboarded.
+**`frontend/src/App.jsx`**: App shell with React Router routes (`/`, `/jobs`, `/jobs/:id`, `/jobs/:id/documents/:type`, `/settings`, `/profile`, `/help`), `NavigationBar`, setup wizard management, and onboarding auto-start logic. Only `ChatPanel` remains as an overlay panel; all other views are dedicated pages.
+
+**`frontend/src/contexts/AppContext.jsx`**: Central shared state context (`AppProvider`, `useAppContext`). Provides: `chatOpen`/`setChatOpen`, `onboarding`/`setOnboarding`, `jobsVersion`/`bumpJobsVersion`, `toasts`/`addToast`/`removeToast`, `handleChatError`, `notifyDocumentSaved`/`onDocumentSaved` (pub/sub for agent document save events).
 
 **`frontend/src/api.js`**: Centralized API client with helper functions for all backend endpoints. All fetch calls go through this module. Includes `getApiBase()` which detects Tauri (via `window.__TAURI_INTERNALS__`) and returns absolute URLs to reach Flask directly, bypassing the Vite proxy.
 
-**`frontend/src/pages/JobList.jsx`**: Main dashboard displaying job table with sortable columns, status badges, and inline add/edit/delete.
+**`frontend/src/pages/HomePage.jsx`**: Dashboard with job stats cards (total, applied, interviewing, offers), AI config status, recent jobs list, and quick action buttons.
+
+**`frontend/src/pages/JobTrackerPage.jsx`**: Full job table with status badges, sortable columns, "Add Job" button. Row click navigates to `/jobs/:id`.
+
+**`frontend/src/pages/JobDetailPage.jsx`**: Full page for a single job: application todos, requirements, nice-to-haves, notes, tags, contact info, salary, and a Documents section with links to cover letter/resume editors.
+
+**`frontend/src/pages/DocumentEditorPage.jsx`**: Side-by-side document editor page with Tiptap rich text editor, formatting toolbar, version history sidebar, save/copy/AI assistant buttons, and Ctrl+S shortcut. Subscribes to agent `document_saved` events via `onDocumentSaved` for real-time refresh.
+
+**`frontend/src/pages/SettingsPage.jsx`**: Full page for configuring LLM provider, API keys, agent mode, and optional integrations (Tavily, RapidAPI). Includes "Test Connection" and inline "How do I get this key?" guides.
+
+**`frontend/src/pages/ProfilePage.jsx`**: Full page for user profile viewer/editor with resume upload section (PDF/DOCX). Users can upload, preview (Structured/Raw toggle), replace, or remove their resume. Auto-triggers LLM parsing on upload. Also supports manual profile markdown editing.
+
+**`frontend/src/pages/HelpPage.jsx`**: Full page with Getting Started, Job Tracking, AI Chat, API Key Guides, and Troubleshooting sections.
+
+**`frontend/src/components/NavigationBar.jsx`**: Top nav bar with `NavLink` route links (Home, Jobs, Profile, Settings, Help) and an "AI Assistant" chat toggle button. Active page indicated via NavLink styling.
+
+**`frontend/src/components/ChatPanel.jsx`**: Slide-out AI assistant panel with SSE streaming, markdown rendering, and tool execution visibility. Manages search results state and renders `SearchResultsPanel` alongside chat when results exist. Includes `JOB_MUTATING_TOOLS` set for live job list refresh. Handles `document_saved` SSE events and forwards them via `notifyDocumentSaved` to AppContext.
+
+**`frontend/src/components/SearchResultsPanel.jsx`**: Slide-out panel displaying job search results with collapsible cards, star ratings, fit reasons, and "Add to Tracker" buttons. Appears alongside ChatPanel during/after job searches.
 
 **`frontend/src/components/JobForm.jsx`**: Reusable form component for creating and editing jobs. Handles all job fields including requirements and nice-to-haves.
 
-**`frontend/src/components/JobDetailPanel.jsx`**: Slide-out panel that displays comprehensive job details including requirements, nice-to-haves, salary range, location, and job fit rating. Shows all fields in a read-only format with markdown rendering.
+**`frontend/src/components/DocumentEditor.jsx`**: Tiptap rich text editor wrapper with formatting toolbar (bold, italic, H1-H3, bullet/ordered lists, blockquote, horizontal rule, undo/redo). Accepts `content` prop and `onUpdate` callback.
 
-**`frontend/src/components/ChatPanel.jsx`**: Slide-out AI assistant panel with SSE streaming, markdown rendering, and tool execution visibility. Includes `JOB_MUTATING_TOOLS` set for live job list refresh.
-
-**`frontend/src/components/ProfilePanel.jsx`**: Slide-out user profile viewer/editor panel with resume upload section (PDF/DOCX). Users can upload, preview (Structured/Raw toggle), replace, or remove their resume. Auto-triggers LLM parsing on upload; includes a Re-parse button. `StructuredResumeView` sub-component renders parsed JSON as a rich formatted view. Also supports manual profile markdown editing.
-
-**`frontend/src/components/SettingsPanel.jsx`**: Slide-out settings panel for configuring LLM provider, API keys, and integrations. Includes "Test Connection" functionality and saves to config.json. Contains `ApiKeyGuide` sub-component that renders expandable step-by-step instructions and a direct link for each key field (Anthropic, OpenAI, Gemini, Tavily, RapidAPI); renders nothing for Ollama (no key required).
+**`frontend/src/components/SetupWizard.jsx`**: Centered modal wizard for first-time setup. Five steps: welcome, provider selection (card grid), API key entry with inline how-to guide and test connection, optional integrations (Tavily + RapidAPI), and a done screen that launches onboarding. Requires a successful connection test before allowing the user to continue (Ollama skips the key requirement). Calls `onComplete()` to open onboarding chat or `onClose()` to dismiss.
 
 **`frontend/src/components/ModelCombobox.jsx`**: Searchable combobox for selecting an LLM model. Fetches available models from the provider's API with a client-side cache (5-minute TTL). Falls back to free-text input if the API call fails or no API key is entered yet.
-
-**`frontend/src/components/SetupWizard.jsx`**: Centered modal wizard for first-time setup. Four steps: welcome, provider selection (2×2 card grid), API key entry with always-visible inline how-to guide and test connection, and a done screen that launches onboarding. Requires a successful connection test before allowing the user to continue (Ollama skips the key requirement). Calls `onComplete()` to open onboarding chat or `onClose()` to dismiss.
 
 **`frontend/src/components/Toast.jsx`**: Toast notification system (`useToast` hook and `ToastContainer` component). Supports error, warning, and info types with collapsible technical details. Error toasts require manual dismissal; others auto-dismiss after 5 seconds.
 
@@ -251,7 +300,7 @@ The startup script will:
 - Start both servers concurrently
 - Open your browser to http://localhost:3000
 
-Once the app is running, configure your LLM API key through the Settings panel (gear icon in the header).
+Once the app is running, configure your LLM API key through the Settings page (click "Settings" in the navigation bar).
 
 ### Manual Setup (For Development Workflow)
 
@@ -288,6 +337,14 @@ Configuration is managed through `config.json` (auto-created on first run). You 
     "api_key": "",
     "model": ""
   },
+  "search_llm": {
+    "provider": "",
+    "api_key": "",
+    "model": ""
+  },
+  "agent": {
+    "design": "default"
+  },
   "integrations": {
     "search_api_key": "",
     "rapidapi_key": ""
@@ -302,7 +359,7 @@ Configuration is managed through `config.json` (auto-created on first run). You 
 ```bash
 export LLM_PROVIDER=anthropic
 export LLM_API_KEY=your-api-key-here
-export SEARCH_API_KEY=your-tavily-key
+export INTEGRATIONS_SEARCH_API_KEY=your-tavily-key
 export LOG_LEVEL=DEBUG
 ```
 
@@ -406,6 +463,24 @@ This allows flexibility for different deployment scenarios while maintaining a s
 | PATCH | `/api/jobs/:id` | Update job (partial) | `{field: value, ...}` | `{job}` |
 | DELETE | `/api/jobs/:id` | Delete job | — | `204 No Content` |
 
+### Application Todos API
+
+| Method | Endpoint | Description | Request Body | Response |
+|--------|----------|-------------|--------------|----------|
+| GET | `/api/jobs/:id/todos` | List todos for a job | — | `[{todo}, ...]` |
+| POST | `/api/jobs/:id/todos` | Create a todo | `{title, category?, description?}` | `{todo}` |
+| PATCH | `/api/jobs/:id/todos/:todoId` | Update a todo | `{title?, completed?, ...}` | `{todo}` |
+| DELETE | `/api/jobs/:id/todos/:todoId` | Delete a todo | — | `204 No Content` |
+
+### Job Documents API
+
+| Method | Endpoint | Description | Request Body | Response |
+|--------|----------|-------------|--------------|----------|
+| GET | `/api/jobs/:id/documents?type=` | Get latest document version | — | `{document}` |
+| GET | `/api/jobs/:id/documents/history?type=` | Get all document versions | — | `[{document}, ...]` |
+| POST | `/api/jobs/:id/documents` | Save new document version | `{doc_type, content, edit_summary?}` | `{document}` |
+| DELETE | `/api/jobs/:id/documents/:docId` | Delete a document version | — | `204 No Content` |
+
 **Job Object Fields:**
 
 Required:
@@ -443,6 +518,8 @@ Auto-generated:
 | GET | `/api/chat/conversations/:id` | Get conversation with messages | — | `{conversation with messages}` |
 | DELETE | `/api/chat/conversations/:id` | Delete conversation | — | `204 No Content` |
 | POST | `/api/chat/conversations/:id/messages` | Send message | `{content}` | SSE stream |
+| GET | `/api/chat/conversations/:id/search-results` | Get search results for conversation | — | `[{searchResult}, ...]` |
+| POST | `/api/chat/conversations/:id/search-results/:resultId/add-to-tracker` | Promote search result to job tracker | — | `{job}` |
 
 **SSE Event Types** (chat streaming):
 
@@ -450,6 +527,8 @@ Auto-generated:
 - `tool_start`: `{"id": "...", "name": "...", "arguments": {...}}` — Tool execution starting
 - `tool_result`: `{"id": "...", "name": "...", "result": {...}}` — Tool completed successfully
 - `tool_error`: `{"id": "...", "name": "...", "error": "..."}` — Tool execution failed
+- `search_result_added`: `{...SearchResult}` — Job added to search results panel (emitted by `add_search_result` tool)
+- `document_saved`: `{"document": {...}, "job_id": int, "doc_type": "..."}` — Document saved (emitted by `save_job_document` tool)
 - `done`: `{"content": "full text"}` — Agent finished
 - `error`: `{"message": "..."}` — Fatal error
 
@@ -511,6 +590,14 @@ The `POST /api/resume/parse` endpoint uses `ResumeParser` to send the raw extrac
     "provider": "",
     "api_key": "",
     "model": ""
+  },
+  "search_llm": {
+    "provider": "",
+    "api_key": "",
+    "model": ""
+  },
+  "agent": {
+    "design": "default"
   },
   "integrations": {
     "search_api_key": "",
@@ -584,6 +671,73 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 ```
 
+### SearchResult Model
+
+Located in `backend/models/search_result.py`.
+
+**Schema:**
+
+```python
+class SearchResult(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversation.id'), nullable=False)
+    company = db.Column(db.String(200), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    url = db.Column(db.Text)
+    salary = db.Column(db.String(100))
+    location = db.Column(db.String(200))
+    remote_type = db.Column(db.String(50))
+    source = db.Column(db.String(200))
+    description = db.Column(db.Text)
+    requirements = db.Column(db.Text)
+    nice_to_haves = db.Column(db.Text)
+    job_fit = db.Column(db.Integer)           # 0-5 star rating
+    fit_reason = db.Column(db.Text)
+    added_to_tracker = db.Column(db.Boolean, default=False)
+    tracker_job_id = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+### ApplicationTodo Model
+
+Located in `backend/models/application_todo.py`.
+
+**Schema:**
+
+```python
+class ApplicationTodo(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.Integer, db.ForeignKey('job.id'), nullable=False)
+    category = db.Column(db.String(50))       # document, question, assessment, reference, other
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    completed = db.Column(db.Boolean, default=False)
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+### JobDocument Model
+
+Located in `backend/models/job_document.py`.
+
+**Schema:**
+
+```python
+class JobDocument(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.Integer, db.ForeignKey('job.id'), nullable=False)
+    doc_type = db.Column(db.String(50), nullable=False)  # 'cover_letter' or 'resume'
+    content = db.Column(db.Text, nullable=False)
+    version = db.Column(db.Integer, nullable=False)
+    edit_summary = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+**Key Methods:**
+- `get_latest(job_id, doc_type)`: Get the latest version of a document
+- `get_history(job_id, doc_type)`: Get all versions of a document
+- `next_version(job_id, doc_type)`: Get the next version number
+
 ## LLM Provider System
 
 The LLM system uses LiteLLM to provide a unified interface across multiple AI providers. All providers are accessed through `litellm.completion()` using a provider-prefixed model string and an `LLMConfig` dataclass created by a single factory function.
@@ -619,6 +773,14 @@ Providers are configured through `config.json` (with optional environment variab
     "provider": "",
     "api_key": "",
     "model": "claude-haiku-4-5-20251001"
+  },
+  "search_llm": {
+    "provider": "",
+    "api_key": "",
+    "model": ""
+  },
+  "agent": {
+    "design": "default"
   }
 }
 ```
@@ -634,6 +796,13 @@ export LLM_MODEL=custom-model-name
 export ONBOARDING_LLM_PROVIDER=anthropic
 export ONBOARDING_LLM_API_KEY=your-api-key
 export ONBOARDING_LLM_MODEL=claude-haiku-4-5-20251001
+
+# Search configuration (optional, defaults to main config)
+export SEARCH_LLM_PROVIDER=anthropic
+export SEARCH_LLM_MODEL=claude-haiku-4-5-20251001
+
+# Agent design
+export AGENT_DESIGN=default
 ```
 
 Configuration is managed by `backend/config_manager.py` which reads from `config.json` and falls back to environment variables. The Settings UI provides a user-friendly interface for configuration.
@@ -665,10 +834,17 @@ The agent system uses abstract base classes (ABCs) to define the interface betwe
 - `OnboardingAgent` — profile interview agent with `run(messages)` generator method
 - `ResumeParser` — resume parsing with `parse(raw_text)` method
 
-**Agent Tools** (`backend/agent/tools.py`):
-- `AgentTools` — tool implementations with `@agent_tool` decorator
+**Agent Design Selector** (`backend/agent/__init__.py`):
+- `get_agent_classes(design_name)` — resolves active design at call time (hot-swappable)
+- Supports raw names (`default`, `micro_agents_v1`) and mode aliases (`freeform`, `orchestrated`)
+
+**Agent Tools** (`backend/agent/tools/`):
+- `@agent_tool`-decorated functions across multiple modules
 - `execute(tool_name, arguments)` — dispatch tool calls by name
 - `get_tool_definitions()` — return tool metadata for LLM framework adaptation
+
+**Event Bus** (`backend/agent/event_bus.py`):
+- Thread-safe event queue for streaming SSE events from agent worker threads
 
 **Agent Loop** (implemented by concrete agent classes):
 1. User sends message
@@ -681,25 +857,33 @@ The agent system uses abstract base classes (ABCs) to define the interface betwe
 
 ### Available Tools
 
-Defined in `backend/agent/tools.py`:
+Defined in `backend/agent/tools/`:
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `web_search` | Search the web via Tavily API | `query`, `num_results` (opt) |
-| `job_search` | Search job boards via RapidAPI (JSearch, Active Jobs DB, LinkedIn) | `query`, `location` (opt), `remote_only` (opt), `salary_min`/`salary_max` (opt), `provider` (opt) |
-| `scrape_url` | Fetch and parse a web page | `url` |
+| `web_research` | Multi-step web research with synthesis and citations | `query` |
+| `job_search` | Search job boards via RapidAPI (JSearch, Active Jobs DB, LinkedIn) | `query`, `location` (opt), `remote_only` (opt), `salary_min`/`salary_max` (opt), `provider` (opt), `num_results` (opt) |
+| `scrape_url` | Fetch and parse a web page | `url`, `query` (opt) |
 | `create_job` | Add a job to the database | `company`, `title` (required); plus all optional job fields |
 | `list_jobs` | List and filter tracked jobs | `status` (opt), `company` (opt), `title` (opt), `url` (opt), `limit` (opt) |
+| `edit_job` | Update an existing job | `job_id` (required); plus optional fields to update |
+| `remove_job` | Delete a job and associated todos/documents | `job_id` |
+| `list_job_todos` | List application todos for a job | `job_id` |
+| `add_job_todo` | Add an application todo item | `job_id`, `title` (required); `category` (opt), `description` (opt) |
+| `edit_job_todo` | Update an existing todo | `job_id`, `todo_id` (required); plus optional fields |
+| `remove_job_todo` | Delete a todo | `job_id`, `todo_id` |
 | `read_user_profile` | Read the user's profile markdown | — |
-| `update_user_profile` | Update the user's profile | `content` |
-| `read_resume` | Read the user's uploaded resume text | — |
-| `run_job_search` | Launch a comprehensive job search sub-agent | `query`, `location` (opt), `remote_only` (opt), `salary_min`/`salary_max` (opt) |
+| `update_user_profile` | Update the user's profile | `content`; `section` (opt) |
+| `read_resume` | Read the user's uploaded resume | — |
 | `add_search_result` | Add a qualifying job to search results panel | `company`, `title`, `job_fit` (required); plus optional fields |
 | `list_search_results` | List search results from current conversation | `min_fit` (opt) |
+| `save_job_document` | Save a cover letter or tailored resume for a job | `job_id`, `doc_type`, `content`; `edit_summary` (opt) |
+| `get_job_document` | Retrieve latest document for a job | `job_id`; `doc_type` (opt) |
 
 ### Tool Definitions
 
-Tools are defined as `@agent_tool`-decorated methods on `AgentTools` with colocated Pydantic input schemas. The `get_tool_definitions()` method returns metadata that agent implementations use to adapt tools to their specific LLM framework:
+Tools are defined as `@agent_tool`-decorated functions in `backend/agent/tools/` with colocated Pydantic input schemas. The `get_tool_definitions()` function returns metadata that agent implementations use to adapt tools to their specific LLM framework:
 
 ```python
 class WebSearchInput(BaseModel):
@@ -734,26 +918,28 @@ Once complete, it sets the `onboarded: true` flag in the user profile frontmatte
 
 ### Adding a New Tool
 
-1. Create a Pydantic input model in `backend/agent/tools.py`
-2. Add the `@agent_tool`-decorated method to the `AgentTools` class in `backend/agent/tools.py`
+1. Create a new module in `backend/agent/tools/` (or add to an existing one) with a Pydantic input model and an `@agent_tool`-decorated function
+2. Import the module in `backend/agent/tools/__init__.py` to register it
 3. If the tool mutates jobs, add its name to `JOB_MUTATING_TOOLS` in `frontend/src/components/ChatPanel.jsx` to trigger live list refresh
 
 Example:
 
 ```python
-# In backend/agent/tools.py
+# In backend/agent/tools/my_tool.py
+
+from pydantic import BaseModel, Field
+from backend.agent.tools._registry import agent_tool
 
 class UpdateJobInput(BaseModel):
     job_id: int = Field(description="ID of the job to update")
     field: str = Field(description="Field name to update")
     value: str = Field(description="New value for the field")
 
-# In the AgentTools class:
 @agent_tool(
     description="Update an existing job in the tracker",
     args_schema=UpdateJobInput,
 )
-def update_job(self, job_id, field, value):
+def update_job(job_id, field, value):
     job = Job.query.get_or_404(job_id)
     setattr(job, field, value)
     db.session.commit()
@@ -763,7 +949,7 @@ def update_job(self, job_id, field, value):
 Then in `frontend/src/components/ChatPanel.jsx`:
 
 ```javascript
-const JOB_MUTATING_TOOLS = new Set(['create_job', 'update_job']);
+const JOB_MUTATING_TOOLS = new Set(['create_job', 'edit_job', 'remove_job', 'add_job_todo', 'edit_job_todo', 'remove_job_todo', 'save_job_document', 'update_job']);
 ```
 
 ## Development Conventions
@@ -934,10 +1120,11 @@ ONBOARDING_LLM_PROVIDER=anthropic
 ONBOARDING_LLM_MODEL=claude-haiku-4-5-20251001
 
 # Optional Integrations
-SEARCH_API_KEY=your-tavily-key
-JSEARCH_API_KEY=your-rapidapi-key
-ADZUNA_APP_ID=your-app-id
-ADZUNA_APP_KEY=your-app-key
+INTEGRATIONS_SEARCH_API_KEY=your-tavily-key
+INTEGRATIONS_RAPIDAPI_KEY=your-rapidapi-key
+
+# Agent Design (optional)
+AGENT_DESIGN=default
 
 # Logging
 LOG_LEVEL=INFO

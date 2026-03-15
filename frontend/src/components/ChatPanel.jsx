@@ -53,6 +53,19 @@ function ChatPanel({ isOpen, onClose, onboarding = false, onOnboardingComplete, 
   useEffect(() => {
     if (isOpen && !onboarding) {
       loadConversations();
+
+      // Recovery: if we reopen and isStreaming is true but the abort controller
+      // is gone, the stream finished while the panel was closed — reset state
+      // and reload the conversation to pick up the saved assistant message.
+      if (isStreaming && !abortControllerRef.current) {
+        setIsStreaming(false);
+        if (currentConversation) {
+          selectConversation(currentConversation.id);
+        }
+      } else if (!isStreaming && currentConversation) {
+        // Normal reopen after stream finished: reload to sync with DB
+        selectConversation(currentConversation.id);
+      }
     }
   }, [isOpen]);
 
@@ -304,6 +317,7 @@ function ChatPanel({ isOpen, onClose, onboarding = false, onOnboardingComplete, 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
+    let aborted = false;
     try {
       await streamer(convo.id, userMessage.content, (event) => {
         // Handle search-related events
@@ -356,22 +370,24 @@ function ChatPanel({ isOpen, onClose, onboarding = false, onOnboardingComplete, 
       if (e.name === "AbortError") {
         // User cancelled — keep whatever content we have so far
         pushUpdate();
-        abortControllerRef.current = null;
-        setIsStreaming(false);
+        aborted = true;
         return;
       }
       console.error("Stream error:", e);
       if (onError) onError(e.message || String(e), "network");
       pushUpdate();
+    } finally {
+      abortControllerRef.current = null;
+      setIsStreaming(false);
     }
+
+    if (aborted) return;
 
     // Remove the empty assistant placeholder if no content was generated (error case)
     if (!fullText && segments.length === 0) {
       setMessages((prev) => prev.filter((_, idx) => idx !== assistantIdx));
     }
 
-    abortControllerRef.current = null;
-    setIsStreaming(false);
     if (onboardingDone && onOnboardingComplete) {
       onOnboardingComplete();
       return;

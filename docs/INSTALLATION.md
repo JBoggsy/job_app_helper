@@ -447,6 +447,25 @@ After starting, continue to [First-Time Setup](#first-time-setup) to configure t
 
 ---
 
+## Data & Privacy
+
+All data stays on your machine. Shortlist never sends your data to external servers.
+
+**What's stored locally** (in the `user_data/` folder for source installs, or the platform app data directory for desktop installs):
+- `app.db` — your job applications, conversations, and profile data
+- `telemetry.db` — usage traces used to improve AI agent performance (agent traces, tool calls, LLM token counts/latency/cost, thumbs up/down feedback)
+- `config.json` — your settings and API keys
+- `user_profile.md` — your job search profile
+
+**Telemetry:** Enabled by default to help improve the AI assistant's performance over time. You can:
+- **Disable it** via the Settings page or by setting `"telemetry": {"enabled": false}` in `config.json`
+- **Export it** (full or anonymized) from the Settings page
+- **Delete it** by removing the `telemetry.db` file
+
+Telemetry data is automatically pruned after 90 days (configurable via `telemetry.retention_days` in `config.json`).
+
+---
+
 ## Troubleshooting
 
 ### Desktop App Issues
@@ -633,7 +652,7 @@ Then restart the app with `./start.sh` or `start.bat`.
 If you run into issues not covered here:
 
 1. Check the built-in help page (click **"Help"** in the navigation bar)
-2. Check the `logs/app.log` file for error messages (in the app folder for source installs, or in your system's app data directory for desktop installs)
+2. Check the `user_data/logs/app.log` file for error messages (in the `user_data/` folder for source installs, or in your system's app data directory for desktop installs)
 3. Open an issue on the [GitHub repository](https://github.com/JBoggsy/shortlist/issues) with:
    - Whether you're using the desktop app or running from source
    - What you were trying to do

@@ -21,6 +21,7 @@ Shortlist helps you organize your job search. Track applications through the hir
 - **Job Fit Ratings**: Rate how well each job matches your profile (0-5 stars)
 - **Guided Setup Wizard**: First-time setup walks you through choosing a provider and entering your API key, with inline step-by-step instructions for each key
 - **Agent Modes**: Switch between freeform (single ReAct agent) and orchestrated (multi-agent pipeline with workflows) modes
+- **Telemetry & Optimization**: Passive trace collection for DSPy optimization—captures agent traces, tool calls, LLM metrics, and user feedback. Stored locally, exportable, fully configurable.
 - **Desktop App**: Download and install—no programming tools required. Also runs as a web app from source.
 
 ## Download
@@ -198,6 +199,16 @@ Download the latest release from [GitHub Releases](https://github.com/JBoggsy/sh
 | **Linux** | `~/.local/share/com.shortlist.app/` |
 | **macOS** | `~/Library/Application Support/com.shortlist.app/` |
 | **Windows** | `C:\Users\<user>\AppData\Roaming\com.shortlist.app\` |
+
+## Data & Privacy
+
+All data stays on your machine. Shortlist never sends your data to external servers.
+
+- **Job data** is stored in `app.db` (SQLite) in the `user_data/` directory (or the platform app data directory for desktop installs)
+- **Telemetry data** is stored in a separate `telemetry.db` file and is used to improve AI agent performance via [DSPy optimization](docs/TELEMETRY_DESIGN.md). It captures agent traces, tool calls, LLM metrics (token counts, latency, cost), and thumbs up/down feedback — but never leaves your machine
+- **Telemetry is enabled by default** and can be disabled at any time via the Settings page or by setting `telemetry.enabled` to `false` in `config.json`
+- **Retention** defaults to 90 days (configurable). Old data is automatically pruned on startup
+- **Export**: You can export telemetry data (full or anonymized) from the Settings page for sharing or analysis
 
 For building from source or developing the desktop app, see [DEVELOPMENT.md](docs/DEVELOPMENT.md#desktop-development-tauri).
 

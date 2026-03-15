@@ -43,7 +43,7 @@ If applicable, add screenshots to help explain your problem.
 
 If relevant, include any error logs from:
 - Browser console (F12 → Console tab)
-- Backend logs (`logs/app.log` or terminal output)
+- Backend logs (`user_data/logs/app.log` or terminal output)
 
 ```
 Paste logs here

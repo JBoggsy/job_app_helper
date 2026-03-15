@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Chat panel stuck in streaming state after close/reopen** — Fixed bug where closing the AI chat panel mid-stream and reopening it would show the Stop button permanently even after the agent finished. Added `finally` block to guarantee `isStreaming` is always reset, plus a recovery mechanism on panel reopen that detects stale streaming state and reloads the conversation from the database.
+
+### Added
+- **Telemetry system for DSPy optimization** — New `backend/telemetry/` package that passively captures agent traces, tool calls, workflow results, LLM metrics, and user feedback during normal app usage. Data stored in separate `telemetry.db` SQLite file. Features: TracedModule mixin for DSPy modules, auto-traced workflows via `__init_subclass__`, LiteLLM callback for token/cost tracking, contextvar-based run/trace propagation, background batch writer, export utilities (full, anonymized, DSPy examples, JSONL), configurable retention with compaction, and telemetry stats/export in Settings UI. Thumbs up/down feedback buttons on assistant messages. All telemetry is error-isolated and can be disabled via `telemetry.enabled` config.
+
 ## [0.11.1] - 2026-03-10
 
 ### Added
@@ -247,7 +253,7 @@ Complete migration from custom LLM provider layer to LangChain — all 4 provide
 **Tauri v2 Desktop App (Optional)**
 - Added Tauri v2 as an optional native desktop wrapper using the sidecar approach
 - Tauri renders the React frontend in a native webview and launches Flask as a child process
-- Data files (app.db, config.json, logs/, user_profile.md) are stored in platform-standard directories when running under Tauri
+- Data files (app.db, config.json, logs/, user_profile.md) are stored in platform-standard directories when running under Tauri (defaults to `user_data/` for source installs)
 - Existing browser-based workflow (`start.sh` / `start.bat`) preserved as fallback
 
 **Data Directory Abstraction**

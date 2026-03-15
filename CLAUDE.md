@@ -96,13 +96,11 @@ lsof -ti:5000 | xargs kill -9 2>/dev/null
 - `start.bat` — unified startup script for Windows (checks deps, installs packages, starts servers, opens browser)
 - `build_sidecar.sh` — builds Flask backend as a PyInstaller binary for Tauri sidecar (Mac/Linux)
 - `build_sidecar.ps1` — builds Flask backend as a PyInstaller binary for Tauri sidecar (Windows)
-- `config.json` — application configuration file (auto-created, gitignored)
-- `app.db` — SQLite database (auto-created, gitignored)
-- `user_profile.md` — user job search profile with YAML frontmatter (auto-created, gitignored)
+- `user_data/` — all user data files (auto-created, gitignored); contains `app.db`, `telemetry.db`, `config.json`, `user_profile.md`, `resumes/`, `logs/`
 
 ### Backend
 - `main.py` — entry point, runs Flask server (supports `--data-dir` and `--port` CLI args)
-- `backend/data_dir.py` — centralized data directory resolver (`get_data_dir()`); uses `DATA_DIR` env var or defaults to project root
+- `backend/data_dir.py` — centralized data directory resolver (`get_data_dir()`); uses `DATA_DIR` env var or defaults to `user_data/`
 - `backend/app.py` — Flask app factory (`create_app`)
 - `backend/config.py` — app configuration (Flask-specific settings)
 - `backend/config_manager.py` — configuration file management (read/write `config.json`, env var fallback)
@@ -130,6 +128,14 @@ lsof -ti:5000 | xargs kill -9 2>/dev/null
 - `backend/agent/tools/` — `@agent_tool`-decorated tool functions (web_search, job_search, scrape_url, create_job, list_jobs, edit_job, remove_job, list_job_todos, add_job_todo, edit_job_todo, remove_job_todo, read_user_profile, update_user_profile, read_resume, add_search_result, list_search_results, save_job_document, get_job_document), Pydantic input schemas, `execute()` for tool dispatch (auto-emits `tool_start`/`tool_result`/`tool_error` events to the `EventBus`), and `get_tool_definitions()` for returning tool metadata. Agent implementations convert Pydantic schemas to OpenAI function-calling format via `.model_json_schema()`.
 - `backend/agent/tools/job_documents.py` — `save_job_document`, `get_job_document` tools for persisting cover letters and resumes per job
 - `backend/agent/user_profile.py` — User profile markdown file management with YAML frontmatter (onboarded flag with tri-state: `false`/`in_progress`/`true`), read/write/onboarding helpers
+- `backend/telemetry/` — Telemetry package for collecting DSPy optimization training data. Passively captures agent traces, tool calls, workflow results, LLM metrics, and user feedback during normal app usage. Data stored in separate `telemetry.db` SQLite file.
+- `backend/telemetry/schema.py` — Database schema (6 tables: runs, module_traces, tool_calls, workflow_traces, llm_calls, user_signals), initialization, and migration support
+- `backend/telemetry/collector.py` — `TelemetryCollector` singleton with background writer thread, non-blocking `record_*` methods, batch flush (500ms/50 events), `compact()` for retention, `init_collector()`/`get_collector()`/`shutdown_collector()` accessors
+- `backend/telemetry/context.py` — `current_run_id`/`current_trace_id` ContextVars, `telemetry_run()` context manager for run lifecycle, `copy_telemetry_context()` and `TracedThreadPoolExecutor` for thread propagation
+- `backend/telemetry/traced_module.py` — `TracedModule` mixin for `dspy.Module` subclasses; wraps `__call__` to capture inputs, outputs, CoT reasoning, and timing
+- `backend/telemetry/decorators.py` — `traced_workflow()` decorator for workflow `run()` methods; auto-applied via `BaseWorkflow.__init_subclass__`
+- `backend/telemetry/litellm_hook.py` — `TelemetryLiteLLMCallback` for capturing per-LLM-call token counts, latency, and cost; registered at startup
+- `backend/telemetry/export.py` — Export utilities: `export_full()`, `export_anonymized()`, `export_dspy_examples()`, `export_jsonl()`, `get_stats()`
 
 ### Frontend
 - `frontend/vite.config.js` — Vite config (React plugin, Tailwind CSS plugin, API proxy, Tauri-compatible settings)
@@ -208,6 +214,9 @@ lsof -ti:5000 | xargs kill -9 2>/dev/null
 | GET | `/api/resume` | Get saved resume info, parsed text, and structured data |
 | DELETE | `/api/resume` | Delete saved resume |
 | POST | `/api/resume/parse` | Parse resume with LLM (cleans up text, returns structured JSON) |
+| POST | `/api/chat/conversations/:id/messages/:msgId/feedback` | Submit thumbs up/down feedback on a message |
+| GET | `/api/telemetry/stats` | Get telemetry stats (run count, records, DB size) |
+| GET | `/api/telemetry/export?mode=` | Export telemetry data (`full` or `anonymized`) |
 | GET | `/api/health` | Health check (returns 503 if LLM not configured) |
 
 Job statuses: `saved`, `applied`, `interviewing`, `offer`, `rejected`
@@ -217,7 +226,7 @@ Optional job fields: `salary_min` (int), `salary_max` (int), `location` (string)
 
 ### Configuration
 
-**Primary method:** `config.json` file (auto-created in project root)
+**Primary method:** `config.json` file (auto-created in `user_data/`)
 
 Users configure the app through the **Settings page** (accessed via the Settings link in the navigation bar). The Settings page allows users to:
 - Select LLM provider (Anthropic, OpenAI, Gemini, Ollama)
@@ -263,6 +272,10 @@ Configuration structure in `config.json`:
   },
   "logging": {
     "level": "INFO"
+  },
+  "telemetry": {
+    "enabled": true,
+    "retention_days": 90
   }
 }
 ```
@@ -282,7 +295,7 @@ Environment variables are checked first, then `config.json`. Useful for developm
 - `AGENT_DESIGN` — agent design/strategy to use (default: `default`); supports raw names (`default`, `micro_agents_v1`) or mode aliases (`freeform`, `orchestrated`); hot-swappable via Settings UI without server restart
 - `SEARCH_API_KEY` — Tavily API key for web search tool
 - `INTEGRATIONS_RAPIDAPI_KEY` — RapidAPI key for job search APIs (JSearch, Active Jobs DB, LinkedIn Job Search); also accepts legacy `JSEARCH_API_KEY`
-- `DATA_DIR` — directory for all data files (db, config, logs, profile); defaults to project root if unset
+- `DATA_DIR` — directory for all data files (db, config, logs, profile); defaults to `user_data/` if unset
 
 ### Logging
 - `LOG_LEVEL` — `DEBUG`, `INFO` (default), `WARNING`, `ERROR`
@@ -305,14 +318,14 @@ Environment variables are checked first, then `config.json`. Useful for developm
 
 ### Configuration & Startup
 - Use `./start.sh` (Mac/Linux) or `start.bat` (Windows) to start the app — these scripts handle everything automatically
-- Configuration is stored in `config.json` in the project root (auto-created, gitignored)
+- Configuration is stored in `config.json` in the `user_data/` directory (auto-created, gitignored)
 - Users configure LLM and integrations through the **Settings page** (accessible via nav bar)
 - Setup wizard auto-opens on first launch if LLM is not configured
 - Environment variables can override `config.json` values (useful for development/deployment)
 - The `/api/health` endpoint returns 503 if LLM is not configured (used by frontend to trigger setup wizard)
 
 ### Data Files & Storage
-- All data files are resolved via `backend/data_dir.get_data_dir()` — defaults to project root, overridden by `DATA_DIR` env var
+- All data files are resolved via `backend/data_dir.get_data_dir()` — defaults to `user_data/`, overridden by `DATA_DIR` env var
 - `main.py --data-dir /path` sets `DATA_DIR` before app import; Tauri passes its `appDataDir` this way
 - SQLite database file is `app.db` in the data directory (gitignored, auto-created)
 - User profile file is `user_profile.md` in the data directory (gitignored, auto-created with default template)

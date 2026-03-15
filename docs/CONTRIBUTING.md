@@ -286,6 +286,22 @@ export default function JobList({ onJobSelect }) {
 
 Use clear, descriptive commit messages that explain what changed and why:
 
+### Telemetry Considerations
+
+The app includes a [telemetry system](TELEMETRY_DESIGN.md) that passively captures agent execution data for DSPy optimization. When contributing, keep these points in mind:
+
+- **New workflows** are automatically traced via `BaseWorkflow.__init_subclass__` — no additional work needed
+- **New DSPy modules** should inherit from `TracedModule` for automatic input/output capture:
+  ```python
+  from backend.telemetry.traced_module import TracedModule
+  class MyModule(TracedModule, dspy.Module):
+      ...
+  ```
+- **New tools** are automatically traced by `AgentTools.execute()` — no manual event emission needed
+- **New agent designs** should wrap their run method with `telemetry_run()` from `backend/telemetry/context.py`
+- **Error isolation**: Always wrap telemetry calls in try/except — telemetry failures must never break core functionality
+- **Performance**: Telemetry uses non-blocking queue writes with batched SQLite inserts — it has minimal overhead
+
 ### Format
 
 ```

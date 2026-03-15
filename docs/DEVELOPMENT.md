@@ -13,6 +13,7 @@ This document provides comprehensive technical documentation for developers and 
 - [LLM Provider System](#llm-provider-system)
 - [Agent System](#agent-system)
 - [Development Conventions](#development-conventions)
+- [Telemetry System](#telemetry-system)
 - [Testing](#testing)
 - [Deployment](#deployment)
 
@@ -25,7 +26,7 @@ The Shortlist is built as a full-stack web application with a clear separation b
 - **Desktop (Tauri v2, Optional)**: Native desktop wrapper using the sidecar approach — Tauri renders the React frontend in a native webview and launches Flask as a child process. The existing browser-based workflow is preserved as a fallback.
 - **AI Agent**: Tool-calling agent that can search the web, scrape URLs, search job boards, and manage job records. Supports multiple LLM providers (Anthropic, OpenAI, Gemini, Ollama).
 - **User Profile System**: Markdown-based user profile with YAML frontmatter. Includes onboarding flow with a dedicated agent that interviews users to build their profile.
-- **Data Directory Abstraction**: All data files (app.db, config.json, logs/, user_profile.md) are resolved via `backend/data_dir.get_data_dir()`. Defaults to the project root; overridden by the `DATA_DIR` environment variable (set automatically by Tauri to its appDataDir).
+- **Data Directory Abstraction**: All data files (app.db, config.json, logs/, user_profile.md) are resolved via `backend/data_dir.get_data_dir()`. Defaults to `user_data/`; overridden by the `DATA_DIR` environment variable (set automatically by Tauri to its appDataDir).
 
 ## Tech Stack
 
@@ -90,6 +91,15 @@ shortlist/
 │   ├── llm/
 │   │   ├── llm_factory.py         # create_llm_config() — returns LLMConfig for litellm.completion()
 │   │   └── model_listing.py       # list_models() per provider, MODEL_LISTERS registry
+│   ├── telemetry/
+│   │   ├── __init__.py            # Package exports (init/get/shutdown collector)
+│   │   ├── collector.py           # TelemetryCollector singleton with background writer
+│   │   ├── context.py             # contextvars propagation (run_id, trace_id), telemetry_run()
+│   │   ├── traced_module.py       # TracedModule mixin for DSPy modules
+│   │   ├── decorators.py          # @traced_workflow decorator (auto-applied to workflows)
+│   │   ├── litellm_hook.py        # LiteLLM callback for token/cost/latency capture
+│   │   ├── schema.py              # SQLite schema (6 tables), init_db(), migrations
+│   │   └── export.py              # Export utilities (full, anonymized, DSPy examples, JSONL)
 │   └── agent/
 │       ├── __init__.py            # Agent design selector, hot-swap, get_agent_classes()
 │       ├── base.py                # ABCs: Agent, OnboardingAgent, ResumeParser
@@ -173,6 +183,7 @@ shortlist/
 ├── pyproject.toml                 # Python dependencies (uv)
 ├── config.json                    # User configuration (gitignored)
 ├── app.db                         # SQLite database (gitignored)
+├── telemetry.db                   # Telemetry database for DSPy optimization (gitignored)
 ├── user_profile.md                # User profile file (gitignored)
 └── CLAUDE.md                      # Claude Code instructions
 ```
@@ -183,9 +194,9 @@ shortlist/
 
 **`main.py`**: Entry point that calls `create_app()` and runs the Flask development server. Accepts `--data-dir` (sets `DATA_DIR` env var for custom data file location) and `--port` (default 5000) CLI arguments.
 
-**`backend/data_dir.py`**: Centralized data directory resolver. `get_data_dir()` returns the directory where all runtime data files (app.db, config.json, logs/, user_profile.md) are stored. Uses `DATA_DIR` env var if set, otherwise defaults to the project root.
+**`backend/data_dir.py`**: Centralized data directory resolver. `get_data_dir()` returns the directory where all runtime data files (app.db, config.json, logs/, user_profile.md) are stored. Uses `DATA_DIR` env var if set, otherwise defaults to `user_data/`.
 
-**`backend/app.py`**: App factory that creates and configures the Flask app, registers blueprints, and initializes the database.
+**`backend/app.py`**: App factory that creates and configures the Flask app, registers blueprints, initializes the database, and starts the telemetry collector (if enabled).
 
 **`backend/config.py`**: Centralized configuration loading from config.json file with environment variable fallback. Includes LLM provider settings, API keys, and logging configuration. Uses `get_data_dir()` for the database path.
 
@@ -203,7 +214,7 @@ shortlist/
 
 **`backend/routes/profile.py`**: Profile blueprint for user profile CRUD and onboarding status. Mounted at `/api/profile`.
 
-**`backend/routes/config.py`**: Configuration blueprint for settings management. Provides endpoints for getting/updating config, testing LLM connections, listing providers, and health checks. Mounted at `/api/config`.
+**`backend/routes/config.py`**: Configuration blueprint for settings management. Provides endpoints for getting/updating config, testing LLM connections, listing providers, health checks, and telemetry stats/export. Mounted at `/api/config` and `/api/telemetry`.
 
 **`backend/routes/resume.py`**: Resume upload blueprint. Handles file upload (multipart/form-data), parsing, storage, retrieval, and deletion. Supports PDF and DOCX files up to 10 MB. Also provides an LLM-powered parsing endpoint (`POST /api/resume/parse`) that uses `ResumeParser` to clean up raw extracted text and structure it into JSON. Mounted at `/api/resume`.
 
@@ -351,6 +362,10 @@ Configuration is managed through `config.json` (auto-created on first run). You 
   },
   "logging": {
     "level": "INFO"
+  },
+  "telemetry": {
+    "enabled": true,
+    "retention_days": 90
   }
 }
 ```
@@ -427,7 +442,7 @@ In debug mode, Tauri does not spawn the Flask sidecar — you start it manually.
 uv run python main.py --data-dir /tmp/test-data --port 5000
 ```
 
-This stores all data files (app.db, config.json, logs/, user_profile.md) in the specified directory instead of the project root.
+This stores all data files (app.db, config.json, logs/, user_profile.md) in the specified directory instead of the default `user_data/`.
 
 **Production build:**
 
@@ -563,6 +578,14 @@ Auto-generated:
 | GET | `/api/config/providers` | List available LLM providers | — | `[{id, name, default_model, requires_api_key}, ...]` |
 | GET | `/api/health` | Health check endpoint | — | `{status, llm: {...}, integrations: {...}}` |
 
+### Telemetry API
+
+| Method | Endpoint | Description | Request Body | Response |
+|--------|----------|-------------|--------------|----------|
+| GET | `/api/telemetry/stats` | Get telemetry DB metrics | — | `{runs, records, size}` |
+| GET | `/api/telemetry/export?mode=` | Export telemetry data (`full` or `anonymized`) | — | JSON file download |
+| POST | `/api/chat/conversations/:id/messages/:msgId/feedback` | Record thumbs up/down feedback | `{signal, comment?}` | `{status: "recorded"}` |
+
 ### Resume API
 
 | Method | Endpoint | Description | Request Body | Response |
@@ -605,6 +628,10 @@ The `POST /api/resume/parse` endpoint uses `ResumeParser` to send the raw extrac
   },
   "logging": {
     "level": "INFO"
+  },
+  "telemetry": {
+    "enabled": true,
+    "retention_days": 90
   }
 }
 ```
@@ -781,6 +808,10 @@ Providers are configured through `config.json` (with optional environment variab
   },
   "agent": {
     "design": "default"
+  },
+  "telemetry": {
+    "enabled": true,
+    "retention_days": 90
   }
 }
 ```
@@ -998,6 +1029,74 @@ const JOB_MUTATING_TOOLS = new Set(['create_job', 'edit_job', 'remove_job', 'add
 - **Environment variable override**: Env vars take precedence over `config.json` for deployment flexibility
 - **Defaults**: Provide sensible defaults in `backend/config_manager.py`
 - **Validation**: Validate required config on app startup
+
+## Telemetry System
+
+The telemetry system passively captures agent execution data during normal app usage to enable future [DSPy optimization](TELEMETRY_DESIGN.md). Data is stored in a separate `telemetry.db` SQLite file (in the data directory), isolated from `app.db`.
+
+### What's Captured
+
+| Data Type | Source | Details |
+|-----------|--------|---------|
+| **Agent runs** | `telemetry_run()` context manager | Run lifecycle (start, end, success/error, duration) |
+| **DSPy module traces** | `TracedModule` mixin | Inputs, outputs, CoT reasoning, timing, nested parent-child relationships |
+| **Tool calls** | `AgentTools.execute()` hook | Tool name, arguments, result, success/error, timing |
+| **Workflow traces** | `@traced_workflow` decorator (auto-applied) | Workflow name, outcome, params, result, timing |
+| **LLM call metrics** | LiteLLM callback | Model, tokens in/out, latency, cost |
+| **User feedback** | Feedback API endpoint | Thumbs up/down, optional comment |
+
+### Configuration
+
+In `config.json`:
+```json
+{
+  "telemetry": {
+    "enabled": true,
+    "retention_days": 90
+  }
+}
+```
+
+- **`enabled`**: Set to `false` to disable all telemetry collection. When disabled, all recording calls are no-ops with zero overhead.
+- **`retention_days`**: Records older than this are automatically pruned on startup.
+
+### Key Integration Points
+
+- **`backend/app.py`**: `_init_telemetry()` initializes the collector at startup, registers the LiteLLM callback, and runs compaction
+- **Agent `run()` methods**: Wrapped in `with telemetry_run(conversation_id, user_message, design_name)`
+- **DSPy modules**: Inherit from `TracedModule` mixin (e.g., `class OutcomePlanner(TracedModule, dspy.Module)`)
+- **Workflows**: Auto-traced via `BaseWorkflow.__init_subclass__` — no per-workflow changes needed
+- **Tool calls**: Recorded automatically in `AgentTools.execute()`
+- **LLM calls**: Captured by `TelemetryLiteLLMCallback` registered at startup
+
+### For Developers
+
+**Adding a new DSPy module:** Add `TracedModule` to the class hierarchy:
+```python
+from backend.telemetry.traced_module import TracedModule
+class MyModule(TracedModule, dspy.Module):
+    ...
+```
+
+**Adding a new workflow:** Inherit from `BaseWorkflow` — tracing is auto-applied via `__init_subclass__`.
+
+**Adding a new agent design:** Wrap the agent's run method with `telemetry_run()`:
+```python
+from backend.telemetry.context import telemetry_run
+def run(self, messages):
+    with telemetry_run(self.conversation_id, messages[-1], "my_design"):
+        # ... agent logic ...
+```
+
+**Error isolation:** All telemetry calls are wrapped in try/except. Telemetry failures are logged at DEBUG level and never propagate to affect user experience.
+
+**Inspecting telemetry data:**
+- `GET /api/telemetry/stats` — record counts and DB size
+- `GET /api/telemetry/export?mode=full` — full database export
+- `GET /api/telemetry/export?mode=anonymized` — export with user content stripped
+- Delete `telemetry.db` to reset all telemetry data
+
+For the full architecture and DSPy optimization roadmap, see [TELEMETRY_DESIGN.md](TELEMETRY_DESIGN.md).
 
 ## Testing
 

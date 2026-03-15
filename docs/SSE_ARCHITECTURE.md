@@ -47,7 +47,10 @@ This means:
 | `done` | `{"content": str}` | Full accumulated text; agent finished |
 | `error` | `{"message": str}` | Fatal error; stream terminates |
 | `search_result_added` | Full `SearchResult` dict | Emitted by `add_search_result` tool; opens results panel |
+| `document_saved` | `{"document": {...}, "job_id": int, "doc_type": str}` | Emitted by `save_job_document` tool; refreshes document editor |
 | `onboarding_complete` | `{}` | Onboarding interview finished (onboarding flow only) |
+
+> **Telemetry integration:** All tool calls and agent runs are also recorded by the [telemetry system](TELEMETRY_DESIGN.md) when enabled. The telemetry hooks are separate from the SSE event flow — `AgentTools.execute()` emits events to the `EventBus` *and* records to `TelemetryCollector` independently. See [TELEMETRY_DESIGN.md](TELEMETRY_DESIGN.md) for details.
 
 ---
 

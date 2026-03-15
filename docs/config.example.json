@@ -23,5 +23,9 @@
   },
   "logging": {
     "level": "INFO"
+  },
+  "telemetry": {
+    "enabled": true,
+    "retention_days": 90
   }
 }

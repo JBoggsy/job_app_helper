@@ -1,17 +1,19 @@
 """Centralized data directory resolver.
 
-All data files (app.db, config.json, logs/, user_profile.md) are stored
-under the directory returned by ``get_data_dir()``.
+All user data files (app.db, telemetry.db, config.json, logs/,
+user_profile.md, resumes/) are stored under the directory returned by
+``get_data_dir()``.
 
 When the ``DATA_DIR`` environment variable is set (e.g. by Tauri passing its
-appDataDir), that path is used.  Otherwise the project root is the default,
-preserving the existing browser-mode behaviour.
+appDataDir), that path is used.  Otherwise ``<project_root>/user_data/`` is
+the default, keeping user data separate from source code.
 """
 
 import os
 from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).parent.parent
+_DEFAULT_DATA_DIR = _PROJECT_ROOT / "user_data"
 
 
 def get_data_dir() -> Path:
@@ -21,4 +23,5 @@ def get_data_dir() -> Path:
         p = Path(env_dir)
         p.mkdir(parents=True, exist_ok=True)
         return p
-    return _PROJECT_ROOT
+    _DEFAULT_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    return _DEFAULT_DATA_DIR

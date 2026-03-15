@@ -9,23 +9,15 @@ wheels/
 # Virtual environments
 .venv
 
-# Database
-*.db
-
-# User profile (personal data)
-user_profile.md
-resumes/
+# User data directory (db, config, logs, profile, resumes)
+user_data/
 
 # Node / Frontend
 node_modules/
 frontend/dist/
 
-# Logs
-logs/
-
 # Environment
 .env
-config.json
 *.bkp
 
 # Tauri

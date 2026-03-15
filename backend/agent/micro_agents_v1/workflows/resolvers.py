@@ -28,6 +28,8 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from backend.llm.llm_factory import LLMConfig
 
+from backend.telemetry.traced_module import TracedModule
+
 from ._dspy_utils import build_lm
 
 logger = logging.getLogger(__name__)
@@ -76,7 +78,7 @@ class ResolveJobsSig(dspy.Signature):
     )
 
 
-class JobResolver(dspy.Module):
+class JobResolver(TracedModule, dspy.Module):
     """DSPy module that resolves user references to tracker jobs.
 
     Wraps a ``ChainOfThought`` predictor so the LLM reasons about which
@@ -179,7 +181,7 @@ class ResolveSearchResultsSig(dspy.Signature):
     )
 
 
-class SearchResultResolver(dspy.Module):
+class SearchResultResolver(TracedModule, dspy.Module):
     """DSPy module that resolves user references to search results.
 
     Similar to :class:`JobResolver` but operates on the conversation's

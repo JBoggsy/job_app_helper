@@ -28,6 +28,7 @@ Key methods on AgentTools:
 """
 
 import logging
+import time
 import uuid
 
 from backend.agent.event_bus import EventBus
@@ -96,7 +97,9 @@ class AgentTools(
                 "arguments": arguments,
             })
 
+        t0 = time.monotonic()
         result = self._execute_inner(tool_name, arguments)
+        duration_ms = int((time.monotonic() - t0) * 1000)
 
         # Auto-emit tool_result or tool_error
         if self.event_bus:
@@ -112,6 +115,27 @@ class AgentTools(
                     "name": tool_name,
                     "result": result,
                 })
+
+        # Record to telemetry
+        try:
+            from backend.telemetry.collector import get_collector
+            from backend.telemetry.context import current_run_id, current_trace_id
+            collector = get_collector()
+            if collector is not None:
+                is_error = "error" in result
+                collector.record_tool_call(
+                    call_id=call_id,
+                    run_id=current_run_id.get(),
+                    module_trace_id=current_trace_id.get(),
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    result=result,
+                    duration_ms=duration_ms,
+                    success=not is_error,
+                    error=result.get("error") if is_error else None,
+                )
+        except Exception:
+            logger.debug("Telemetry: failed to record tool call", exc_info=True)
 
         return result
 

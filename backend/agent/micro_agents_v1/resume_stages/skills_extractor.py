@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from backend.llm.llm_factory import LLMConfig
 
+from backend.telemetry.traced_module import TracedModule
+
 from ..workflows._dspy_utils import build_lm
 
 logger = logging.getLogger(__name__)
@@ -98,7 +100,7 @@ class SkillsExtractorSig(dspy.Signature):
     )
 
 
-class SkillsExtractor(dspy.Module):
+class SkillsExtractor(TracedModule, dspy.Module):
     """Extract skills, certifications, publications, and languages from resume sections."""
 
     def __init__(self, llm_config: "LLMConfig"):

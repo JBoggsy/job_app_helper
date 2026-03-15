@@ -24,6 +24,7 @@ from backend.agent.event_bus import EventBus
 from backend.agent.tools import AgentTools
 from backend.agent.user_profile import read_profile
 from backend.llm.llm_factory import LLMConfig
+from backend.telemetry.context import telemetry_run
 
 from .stages.outcome_planner import Outcome, OutcomePlanner
 from .stages.result_collator import ResultCollator
@@ -113,56 +114,57 @@ class MicroAgentsV1Agent(Agent):
         user_profile = read_profile()
         full_text = ""
 
-        # --- Stage 1: Outcome Planning ---
-        self.event_bus.emit("text_delta", {"content": "Thinking...\n\n"})
-        full_text += "Thinking...\n\n"
+        with telemetry_run(self.conversation_id, user_message, "micro_agents_v1"):
+            # --- Stage 1: Outcome Planning ---
+            self.event_bus.emit("text_delta", {"content": "Thinking...\n\n"})
+            full_text += "Thinking...\n\n"
 
-        outcomes = self.outcome_planner.plan(
-            user_message=user_message,
-            conversation_history=messages,
-            user_profile=user_profile,
-        )
-
-        logger.debug(
-            "Planned outcomes: %s",
-            [(o.id, o.description, o.depends_on) for o in outcomes],
-        )
-
-        # --- Stage 2: Workflow Mapping ---
-        assignments = self.workflow_mapper.map(
-            outcomes=outcomes,
-            user_message=user_message,
-            available_workflows=self._available_workflows(),
-        )
-
-        logger.debug(
-            "Workflow assignments: %s",
-            [
-                (a.outcome.id, a.workflow_name, a.params, a.deferred_params)
-                for a in assignments
-            ],
-        )
-
-        # Inject recent conversation context into each assignment's
-        # params so workflows/resolvers can handle relative references
-        # like "the first one" or "the job we just discussed".
-        _MAX_CONTEXT_MESSAGES = 10
-        recent = messages[-(_MAX_CONTEXT_MESSAGES + 1) : -1]  # exclude current msg
-        if recent:
-            context_str = "\n".join(
-                f"{m['role']}: {m['content']}" for m in recent
+            outcomes = self.outcome_planner.plan(
+                user_message=user_message,
+                conversation_history=messages,
+                user_profile=user_profile,
             )
-            for assignment in assignments:
-                assignment.params["conversation_context"] = context_str
 
-        # --- Stage 3: Workflow Execution ---
-        results = self.workflow_executor.execute(assignments)
+            logger.debug(
+                "Planned outcomes: %s",
+                [(o.id, o.description, o.depends_on) for o in outcomes],
+            )
 
-        # --- Stage 4: Result Collation ---
-        collated_text = self.result_collator.collate(
-            results, user_message, assignments=assignments,
-            user_profile=user_profile,
-        )
-        full_text += collated_text
+            # --- Stage 2: Workflow Mapping ---
+            assignments = self.workflow_mapper.map(
+                outcomes=outcomes,
+                user_message=user_message,
+                available_workflows=self._available_workflows(),
+            )
+
+            logger.debug(
+                "Workflow assignments: %s",
+                [
+                    (a.outcome.id, a.workflow_name, a.params, a.deferred_params)
+                    for a in assignments
+                ],
+            )
+
+            # Inject recent conversation context into each assignment's
+            # params so workflows/resolvers can handle relative references
+            # like "the first one" or "the job we just discussed".
+            _MAX_CONTEXT_MESSAGES = 10
+            recent = messages[-(_MAX_CONTEXT_MESSAGES + 1) : -1]  # exclude current msg
+            if recent:
+                context_str = "\n".join(
+                    f"{m['role']}: {m['content']}" for m in recent
+                )
+                for assignment in assignments:
+                    assignment.params["conversation_context"] = context_str
+
+            # --- Stage 3: Workflow Execution ---
+            results = self.workflow_executor.execute(assignments)
+
+            # --- Stage 4: Result Collation ---
+            collated_text = self.result_collator.collate(
+                results, user_message, assignments=assignments,
+                user_profile=user_profile,
+            )
+            full_text += collated_text
 
         self.event_bus.emit("done", {"content": full_text})

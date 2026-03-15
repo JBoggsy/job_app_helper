@@ -56,6 +56,10 @@ DEFAULT_CONFIG = {
     },
     "logging": {
         "level": "INFO"
+    },
+    "telemetry": {
+        "enabled": True,
+        "retention_days": 90
     }
 }
 

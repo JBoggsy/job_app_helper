@@ -25,6 +25,7 @@ import dspy
 from backend.agent.event_bus import EventBus
 from backend.agent.tools import AgentTools
 from backend.llm.llm_factory import LLMConfig
+from backend.telemetry.traced_module import TracedModule
 
 from .workflow_mapper import WorkflowAssignment
 from ..workflows._dspy_utils import build_lm
@@ -73,7 +74,7 @@ class ExtractDeferredParamSig(dspy.Signature):
     )
 
 
-class DeferredParamExtractor(dspy.Module):
+class DeferredParamExtractor(TracedModule, dspy.Module):
     """DSPy module that resolves deferred workflow parameters.
 
     Uses chain-of-thought reasoning to inspect upstream workflow results

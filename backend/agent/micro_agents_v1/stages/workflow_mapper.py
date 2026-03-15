@@ -16,6 +16,7 @@ import dspy
 from pydantic import BaseModel, Field
 
 from backend.llm.llm_factory import LLMConfig
+from backend.telemetry.traced_module import TracedModule
 
 from .outcome_planner import Outcome
 from ..workflows._dspy_utils import build_lm
@@ -102,7 +103,7 @@ class MapWorkflowsSig(dspy.Signature):
     )
 
 
-class WorkflowMapper(dspy.Module):
+class WorkflowMapper(TracedModule, dspy.Module):
     """DSPy module that maps outcomes to workflows.
 
     Uses ``dspy.ChainOfThought`` so the LLM reasons about which workflow

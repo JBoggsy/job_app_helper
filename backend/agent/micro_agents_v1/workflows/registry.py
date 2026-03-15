@@ -22,6 +22,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from backend.telemetry.decorators import traced_workflow
+
 if TYPE_CHECKING:
     from backend.agent.event_bus import EventBus
     from backend.agent.tools import AgentTools
@@ -57,7 +59,16 @@ class BaseWorkflow(ABC):
     ``WorkflowResult``.  Use ``self.event_bus.emit()`` to stream
     progress events (text_delta, etc.) to the user.  Tool events are
     auto-emitted by ``AgentTools.execute()``.
+
+    Telemetry: ``__init_subclass__`` auto-wraps ``run()`` with the
+    ``@traced_workflow`` decorator so all workflows are traced without
+    any per-workflow code changes.
     """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if hasattr(cls, "run") and not getattr(cls.run, "_traced", False):
+            cls.run = traced_workflow(cls.run)
 
     def __init__(
         self,

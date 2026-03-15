@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Optional
 
 import dspy
 
+from backend.telemetry.traced_module import TracedModule
+
 from .contact_extractor import ContactSummaryOutput
 from .experience_extractor import ExperienceEducationOutput
 from .skills_extractor import SkillsCredentialsOutput, SkillsInfo
@@ -50,7 +52,7 @@ class InferSkillsSig(dspy.Signature):
     skills: SkillsInfo = dspy.OutputField(desc="Inferred skills categorised by type")
 
 
-class SkillInferrer(dspy.Module):
+class SkillInferrer(TracedModule, dspy.Module):
     """Infer skills from experience highlights via LLM when no skills section exists."""
 
     def __init__(self, llm_config: "LLMConfig"):

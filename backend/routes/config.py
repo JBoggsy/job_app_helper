@@ -4,6 +4,8 @@ Configuration API routes.
 Provides endpoints for reading and updating application configuration.
 """
 
+from pathlib import Path
+
 from flask import Blueprint, jsonify, request
 from backend.config_manager import (
     load_config,
@@ -281,6 +283,54 @@ def get_providers():
     ]
 
     return jsonify(providers), 200
+
+
+@config_bp.route('/api/telemetry/stats', methods=['GET'])
+def telemetry_stats():
+    """Get telemetry database summary statistics."""
+    from backend.data_dir import get_data_dir
+    from backend.telemetry.export import get_stats
+    db_path = get_data_dir() / "telemetry.db"
+    return jsonify(get_stats(db_path)), 200
+
+
+@config_bp.route('/api/telemetry/export', methods=['GET'])
+def telemetry_export():
+    """Export the telemetry database.
+
+    Query params:
+        mode: "full" (default) or "anonymized"
+    """
+    import tempfile
+    from flask import send_file
+
+    from backend.data_dir import get_data_dir
+    from backend.telemetry.export import export_anonymized, export_full
+
+    db_path = get_data_dir() / "telemetry.db"
+    if not db_path.exists():
+        return jsonify({"error": "No telemetry data"}), 404
+
+    mode = request.args.get("mode", "full")
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    output = Path(tmp.name)
+
+    try:
+        if mode == "anonymized":
+            export_anonymized(db_path, output)
+        else:
+            export_full(db_path, output)
+
+        return send_file(
+            str(output),
+            mimetype="application/x-sqlite3",
+            as_attachment=True,
+            download_name=f"shortlist_telemetry_{mode}.db",
+        )
+    except Exception as e:
+        logger.error("Telemetry export failed: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 @config_bp.route('/api/health', methods=['GET'])

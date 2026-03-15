@@ -17,6 +17,7 @@ import dspy
 from pydantic import BaseModel, Field
 
 from backend.llm.llm_factory import LLMConfig
+from backend.telemetry.traced_module import TracedModule
 
 from ..workflows._dspy_utils import build_lm
 
@@ -88,7 +89,7 @@ class PlanOutcomesSig(dspy.Signature):
     )
 
 
-class OutcomePlanner(dspy.Module):
+class OutcomePlanner(TracedModule, dspy.Module):
     """DSPy module that decomposes a user request into outcomes.
 
     Uses ``dspy.ChainOfThought`` so the LLM reasons step-by-step before

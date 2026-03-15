@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from backend.llm.llm_factory import LLMConfig
 
+from backend.telemetry.traced_module import TracedModule
+
 from ..workflows._dspy_utils import build_lm
 
 logger = logging.getLogger(__name__)
@@ -75,7 +77,7 @@ class ContactExtractorSig(dspy.Signature):
     )
 
 
-class ContactExtractor(dspy.Module):
+class ContactExtractor(TracedModule, dspy.Module):
     """Extract contact info and summary from resume header sections."""
 
     def __init__(self, llm_config: "LLMConfig"):

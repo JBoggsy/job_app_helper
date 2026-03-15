@@ -19,6 +19,8 @@ from collections.abc import Generator
 
 import dspy
 
+from backend.telemetry.context import telemetry_run
+
 from backend.agent.base import OnboardingAgent
 from backend.agent.event_bus import EventBus
 from backend.agent.tools import AgentTools
@@ -188,29 +190,31 @@ class MicroAgentsV1OnboardingAgent(OnboardingAgent):
     def _worker(self, app, messages):
         with app.app_context():
             try:
-                # Gather inputs for the DSPy module
-                conversation_history = _format_conversation(messages)
-                current_profile = read_profile()
-                resume_text = _get_resume_text()
-                filled, remaining = _section_status(current_profile)
+                user_msg = messages[-1]["content"] if messages else ""
+                with telemetry_run(None, user_msg, "micro_agents_v1_onboarding"):
+                    # Gather inputs for the DSPy module
+                    conversation_history = _format_conversation(messages)
+                    current_profile = read_profile()
+                    resume_text = _get_resume_text()
+                    filled, remaining = _section_status(current_profile)
 
-                sections_filled = ", ".join(filled) if filled else "None"
-                sections_remaining = ", ".join(remaining) if remaining else "None"
+                    sections_filled = ", ".join(filled) if filled else "None"
+                    sections_remaining = ", ".join(remaining) if remaining else "None"
 
-                # Run the DSPy ReAct module synchronously — tool calls
-                # go through AgentTools.execute() which auto-emits to the bus.
-                lm = build_lm(self.llm_config)
-                with dspy.context(lm=lm):
-                    prediction = self._react(
-                        conversation_history=conversation_history,
-                        current_profile=current_profile,
-                        resume_text=resume_text,
-                        sections_remaining=sections_remaining,
-                        sections_filled=sections_filled,
-                    )
+                    # Run the DSPy ReAct module synchronously — tool calls
+                    # go through AgentTools.execute() which auto-emits to the bus.
+                    lm = build_lm(self.llm_config)
+                    with dspy.context(lm=lm):
+                        prediction = self._react(
+                            conversation_history=conversation_history,
+                            current_profile=current_profile,
+                            resume_text=resume_text,
+                            sections_remaining=sections_remaining,
+                            sections_filled=sections_filled,
+                        )
 
-                response_text = prediction.response
-                is_complete = prediction.is_complete
+                    response_text = prediction.response
+                    is_complete = prediction.is_complete
 
                 # Emit the response text
                 if response_text:

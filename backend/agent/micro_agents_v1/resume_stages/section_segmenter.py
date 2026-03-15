@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field, model_validator
 if TYPE_CHECKING:
     from backend.llm.llm_factory import LLMConfig
 
+from backend.telemetry.traced_module import TracedModule
+
 from ..workflows._dspy_utils import build_lm
 
 logger = logging.getLogger(__name__)
@@ -97,7 +99,7 @@ class SectionSegmenterSig(dspy.Signature):
     )
 
 
-class SectionSegmenter(dspy.Module):
+class SectionSegmenter(TracedModule, dspy.Module):
     """Decompose raw resume text into typed, cleaned sections."""
 
     def __init__(self, llm_config: "LLMConfig"):

@@ -346,6 +346,7 @@ export async function parseResumeWithLLM() {
 
 export async function fetchJobDocument(jobId, docType) {
   const res = await fetch(`${BASE}/${jobId}/documents?type=${encodeURIComponent(docType)}`);
+  if (res.status === 204) return null;
   if (!res.ok) throw new Error("Failed to fetch document");
   return res.json();
 }

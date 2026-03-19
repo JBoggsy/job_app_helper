@@ -24,7 +24,7 @@ def get_latest_document(job_id):
         return jsonify({"error": "type query parameter is required"}), 400
     doc = JobDocument.get_latest(job_id, doc_type)
     if not doc:
-        return jsonify({"error": f"No {doc_type} found for job {job_id}"}), 404
+        return '', 204
     return jsonify(doc.to_dict())
 
 

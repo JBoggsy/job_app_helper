@@ -106,7 +106,7 @@ class JobDocumentsMixin:
 
         doc = JobDocument.get_latest(job_id, doc_type)
         if not doc:
-            return {"error": f"No {doc_type} found for job {job_id}"}
+            return {"found": False, "job_id": job_id, "doc_type": doc_type}
 
         return {
             "document": doc.to_dict(),

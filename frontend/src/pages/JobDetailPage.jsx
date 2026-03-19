@@ -58,8 +58,8 @@ export default function JobDetailPage() {
         setJob(found);
         loadTodos(found.id);
         // Check for documents
-        fetchJobDocument(found.id, "cover_letter").then(() => setHasCoverLetter(true)).catch(() => setHasCoverLetter(false));
-        fetchJobDocument(found.id, "resume").then(() => setHasResume(true)).catch(() => setHasResume(false));
+        fetchJobDocument(found.id, "cover_letter").then(doc => setHasCoverLetter(!!doc)).catch(() => setHasCoverLetter(false));
+        fetchJobDocument(found.id, "resume").then(doc => setHasResume(!!doc)).catch(() => setHasResume(false));
       } else {
         navigate("/jobs", { replace: true });
       }

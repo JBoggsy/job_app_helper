@@ -140,7 +140,7 @@ class PolishLetterSig(dspy.Signature):
 
 @register_workflow("write_cover_letter")
 class WriteCoverLetterWorkflow(BaseWorkflow):
-    """Structured single-shot cover letter drafting for a target job."""
+    """Draft a new cover letter from scratch for a specific job posting — use when no cover letter exists yet or the user wants a fresh one."""
 
     OUTPUTS = {
         "cover_letter": "str — the final cover letter text",

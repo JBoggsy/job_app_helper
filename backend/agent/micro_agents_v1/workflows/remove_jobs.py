@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @register_workflow("remove_jobs")
 class RemoveJobsWorkflow(BaseWorkflow):
-    """Identify referenced job(s) and remove them from the tracker."""
+    """Delete one or more jobs from the user's tracked jobs list — use when the user wants to remove, delete, or discard tracked jobs."""
 
     OUTPUTS = {
         "removed_jobs": "list[dict] — each with job_id, company, title",

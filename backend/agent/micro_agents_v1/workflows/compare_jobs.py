@@ -87,7 +87,7 @@ class CompareJobsSig(dspy.Signature):
 
 @register_workflow("compare_jobs")
 class CompareJobsWorkflow(BaseWorkflow):
-    """Compare multiple jobs or search results side-by-side."""
+    """Compare two or more tracked jobs or search results side-by-side on compensation, location, fit, pros/cons and give a recommendation."""
 
     OUTPUTS = {
         "jobs_compared": "list[str] — labels of compared jobs (e.g. 'Title at Company')",

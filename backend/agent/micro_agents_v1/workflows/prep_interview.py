@@ -317,7 +317,7 @@ class AssemblePrepGuideSig(dspy.Signature):
 
 @register_workflow("prep_interview")
 class PrepInterviewWorkflow(BaseWorkflow):
-    """Generate interview preparation materials for a specific job."""
+    """Generate a comprehensive interview prep guide for a specific job — includes likely questions, STAR answers, company research, weakness strategies, and a day-of checklist."""
 
     OUTPUTS = {
         "job": "dict — the target job record",

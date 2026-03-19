@@ -110,6 +110,17 @@ class UnifyResumeSig(dspy.Signature):
     Ensure consistent formatting, smooth transitions between sections,
     no logical gaps, and no grammatical or structural errors.  The result
     must read as a single well-structured document, not a patchwork.
+
+    OUTPUT FORMAT — use Markdown:
+    - Use ``## Section Title`` (level-2 headings) for each resume section
+      (e.g. ``## Work Experience``, ``## Education``, ``## Skills``).
+    - Use ``**bold**`` for job titles, company names, and degree names.
+    - Use bullet lists (``- item``) for experience highlights and skills.
+    - Use sub-categories with bold labels for the Skills section
+      (e.g. ``**Languages:** Python, C++, ...``).
+    - Do NOT use plain-text separator lines (━━━, ---, ===) — headings
+      provide sufficient visual structure.
+    - The candidate's name should be a level-1 heading (``# Name``).
     """
 
     sections_json: str = dspy.InputField(
@@ -119,7 +130,7 @@ class UnifyResumeSig(dspy.Signature):
     user_message: str = dspy.InputField(desc="Original user request")
 
     unified_resume: str = dspy.OutputField(
-        desc="Complete unified resume text, ready to use"
+        desc="Complete unified resume in Markdown format (## headings, **bold**, - bullets)"
     )
     editing_notes: list[str] = dspy.OutputField(
         desc="Brief notes on structural or grammatical fixes applied during unification"
@@ -163,7 +174,7 @@ class ValidateClaimsSig(dspy.Signature):
 
 @register_workflow("specialize_resume")
 class SpecializeResumeWorkflow(BaseWorkflow):
-    """Structured single-shot resume specialisation for a target job."""
+    """Tailor the user's resume for a specific job posting — rewrites sections to emphasise relevant experience and skills while preserving factual accuracy."""
 
     OUTPUTS = {
         "resume": "str — the full specialised resume text",
@@ -190,7 +201,7 @@ class SpecializeResumeWorkflow(BaseWorkflow):
             "get_job_document",
             {"job_id": job["id"], "doc_type": "resume"},
         )
-        if "error" not in doc_resp:
+        if doc_resp.get("document"):
             v = doc_resp["document"]["version"]
             return doc_resp["document"]["content"], f"job-specific resume (v{v})"
 

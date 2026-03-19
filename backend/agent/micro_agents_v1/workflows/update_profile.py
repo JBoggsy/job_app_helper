@@ -94,7 +94,7 @@ class ExtractProfileUpdatesSig(dspy.Signature):
 
 @register_workflow("update_profile")
 class UpdateProfileWorkflow(BaseWorkflow):
-    """Interactively update the user's job search profile."""
+    """Update the user's job-search profile with new preferences, skills, experience, or goals — use when the user shares personal info that should be remembered."""
 
     OUTPUTS = {
         "applied": "list[str] — section names that were updated",

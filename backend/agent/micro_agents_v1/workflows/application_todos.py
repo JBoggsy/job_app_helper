@@ -155,7 +155,7 @@ class ExtractTodoActionsSig(dspy.Signature):
 
 @register_workflow("application_todos")
 class ApplicationTodosWorkflow(BaseWorkflow):
-    """Manage application task lists for a specific job."""
+    """Create, list, check off, add, or remove to-do items for a job application — use for any task-list or checklist management tied to a specific job."""
 
     OUTPUTS = {
         "job": "dict — the target job record",

@@ -197,7 +197,7 @@ class ReviseLetterSig(dspy.Signature):
 
 @register_workflow("edit_cover_letter")
 class EditCoverLetterWorkflow(BaseWorkflow):
-    """Single-shot cover letter critique and revision."""
+    """Critique and revise an existing cover letter — use when the user wants to improve, refine, shorten, or rework a cover letter they already have."""
 
     OUTPUTS = {
         "cover_letter": "str — the revised cover letter text",
@@ -285,7 +285,7 @@ class EditCoverLetterWorkflow(BaseWorkflow):
                 "get_job_document",
                 {"job_id": job["id"], "doc_type": "cover_letter"},
             )
-            if "error" not in doc_resp:
+            if doc_resp.get("document"):
                 cover_letter = doc_resp["document"]["content"]
                 v = doc_resp["document"]["version"]
                 self.event_bus.emit("text_delta", {"content": f"Loaded saved cover letter (v{v}).\n\n"})

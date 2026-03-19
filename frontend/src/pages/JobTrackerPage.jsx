@@ -153,7 +153,7 @@ export default function JobTrackerPage() {
                       {sortColumn === key ? (
                         <span className="text-blue-600">{sortDirection === "asc" ? "\u25B2" : "\u25BC"}</span>
                       ) : (
-                        <span className="text-gray-300">\u21C5</span>
+                        <span className="text-gray-300">{"\u21C5"}</span>
                       )}
                     </span>
                   </th>

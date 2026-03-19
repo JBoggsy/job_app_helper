@@ -359,7 +359,7 @@ def _check_url_liveness(url: str) -> tuple[bool, str]:
 
 @register_workflow("job_search")
 class JobSearchWorkflow(BaseWorkflow):
-    """Search job boards, evaluate fit, and return curated results."""
+    """Find new job openings by searching job boards and the web, scoring each result for fit against the user's profile, and returning curated search results."""
 
     OUTPUTS = {
         "added": "int — number of qualifying jobs added as search results",

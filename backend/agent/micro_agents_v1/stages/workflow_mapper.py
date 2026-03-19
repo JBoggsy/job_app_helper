@@ -79,6 +79,15 @@ class MapWorkflowsSig(dspy.Signature):
       Prefer a specialised workflow when the outcome clearly matches its
       description.  Fall back to "general" only when no specialised
       workflow fits.
+    - Workflows that operate on tracked jobs (edit_job, remove_jobs,
+      specialize_resume, write_cover_letter, edit_cover_letter,
+      compare_jobs, prep_interview, application_todos) perform their own
+      job resolution internally — you do NOT need to resolve or pass a
+      job ID; just include enough context in the params for the workflow
+      to identify which job the user means.
+    - The job_search workflow is strictly for discovering NEW job
+      openings via job boards and web search.  Do not use it to look up
+      or retrieve jobs that are already in the user's tracker.
     - Extract concrete parameter values from the user message where
       possible.  For parameters that depend on earlier outcomes, add
       them to ``deferred_params`` as a mapping from the parameter name

@@ -77,7 +77,7 @@ def _promote_search_result(tools: AgentTools, sr: dict) -> dict:
 
 @register_workflow("add_to_tracker")
 class AddToTrackerWorkflow(BaseWorkflow):
-    """Identify referenced search results and add them to the job tracker."""
+    """Promote one or more search results from a previous job search into the user's tracked jobs list — use when the user wants to save, track, or add a found job."""
 
     OUTPUTS = {
         "added_jobs": "list[dict] — each dict has job_id, company, title for created jobs",

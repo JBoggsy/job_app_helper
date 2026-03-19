@@ -92,7 +92,7 @@ _INT_FIELDS = {"salary_min", "salary_max", "job_fit"}
 
 @register_workflow("edit_job")
 class EditJobWorkflow(BaseWorkflow):
-    """Identify referenced job, extract field updates, and apply them."""
+    """Update fields on an existing tracked job — use for status changes, salary edits, adding notes or tags, changing location, or any field modification."""
 
     OUTPUTS = {
         "job": "dict — the updated job record",

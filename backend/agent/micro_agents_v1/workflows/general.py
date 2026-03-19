@@ -59,7 +59,7 @@ class GeneralTaskSig(dspy.Signature):
 
 @register_workflow("general")
 class GeneralWorkflow(BaseWorkflow):
-    """Fallback workflow: uses a DSPy ReAct loop with the full tool-set."""
+    """Catch-all for questions, conversations, or tasks that no specialised workflow covers — answers using a ReAct loop with all available tools."""
 
     OUTPUTS = {
         "answer": "str — the full text answer produced by the ReAct loop",

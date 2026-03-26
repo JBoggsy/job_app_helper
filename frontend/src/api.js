@@ -279,7 +279,11 @@ export async function testConnection(provider, apiKey, model) {
     body: JSON.stringify({ provider, api_key: apiKey, model }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Connection test failed");
+  if (!res.ok) {
+    const err = new Error(data.error || "Connection test failed");
+    err.errorType = data.error_type || "unknown";
+    throw err;
+  }
   return data;
 }
 

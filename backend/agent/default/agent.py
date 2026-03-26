@@ -47,9 +47,30 @@ def _build_openai_tools(agent_tools: AgentTools) -> list[dict]:
 
 
 def _accumulate_tool_calls(tool_call_chunks: dict[int, dict], delta_tool_calls: list) -> None:
-    """Accumulate streaming tool call fragments into complete tool calls."""
+    """Accumulate streaming tool call fragments into complete tool calls.
+
+    Handles two streaming patterns:
+    - OpenAI-style: each parallel call gets a unique index; arguments arrive as
+      multiple partial fragments across several chunks (id is None after the first).
+    - Ollama-style: all parallel calls arrive with index=0 but each has a distinct
+      id and delivers complete arguments in a single chunk.
+
+    When a new chunk arrives for an index that already has a *different* id, it is
+    treated as a new parallel call rather than a continuation, and a fresh virtual
+    index is allocated to avoid collision.
+    """
     for tc_delta in delta_tool_calls:
         idx = tc_delta.index
+
+        # Detect Ollama-style index collision: same index, different non-empty id.
+        if (
+            idx in tool_call_chunks
+            and tc_delta.id
+            and tool_call_chunks[idx]["id"]
+            and tc_delta.id != tool_call_chunks[idx]["id"]
+        ):
+            idx = max(tool_call_chunks.keys()) + 1
+
         if idx not in tool_call_chunks:
             tool_call_chunks[idx] = {
                 "id": tc_delta.id or "",
@@ -61,7 +82,8 @@ def _accumulate_tool_calls(tool_call_chunks: dict[int, dict], delta_tool_calls: 
             entry["id"] = tc_delta.id
         if tc_delta.function:
             if tc_delta.function.name:
-                entry["name"] += tc_delta.function.name
+                # Assign (not append): name arrives in a single chunk, never as fragments.
+                entry["name"] = tc_delta.function.name
             if tc_delta.function.arguments:
                 entry["arguments"] += tc_delta.function.arguments
 

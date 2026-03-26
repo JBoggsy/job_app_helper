@@ -57,7 +57,7 @@ const PROVIDERS = [
     url: "https://ollama.com/",
     steps: [
       "Download Ollama from ollama.com",
-      "Run 'ollama pull llama3.2' in your terminal",
+      "Run 'ollama pull <model>' (e.g. llama3.1, qwen3, gemma3)",
       "Ensure Ollama is running before testing",
     ],
   },
@@ -104,6 +104,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete }) {
   const [model, setModel] = useState("");
   const [testStatus, setTestStatus] = useState(null); // null | "testing" | "success" | "error"
   const [testMessage, setTestMessage] = useState("");
+  const [testErrorType, setTestErrorType] = useState(null);
   const [saving, setSaving] = useState(false);
   const [tavilyKey, setTavilyKey] = useState("");
   const [jsearchKey, setJsearchKey] = useState("");
@@ -116,6 +117,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete }) {
       setModel("");
       setTestStatus(null);
       setTestMessage("");
+      setTestErrorType(null);
       setSaving(false);
       setTavilyKey("");
       setJsearchKey("");
@@ -127,11 +129,13 @@ export default function SetupWizard({ isOpen, onClose, onComplete }) {
     setApiKey("");
     setTestStatus(null);
     setTestMessage("");
+    setTestErrorType(null);
   }
 
   async function handleTest() {
     setTestStatus("testing");
     setTestMessage("");
+    setTestErrorType(null);
     try {
       const r = await testConnection(selectedProvider, apiKey, model);
       setTestStatus("success");
@@ -139,6 +143,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete }) {
     } catch (e) {
       setTestStatus("error");
       setTestMessage(e.message || "Connection failed.");
+      setTestErrorType(e.errorType || null);
     }
   }
 
@@ -228,6 +233,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete }) {
               setModel={setModel}
               testStatus={testStatus}
               testMessage={testMessage}
+              testErrorType={testErrorType}
               onTest={handleTest}
             />
           )}
@@ -327,7 +333,7 @@ function StepChooseProvider({ selectedProvider, onSelect }) {
   );
 }
 
-function StepEnterKey({ provider, apiKey, setApiKey, model, setModel, testStatus, testMessage, onTest }) {
+function StepEnterKey({ provider, apiKey, setApiKey, model, setModel, testStatus, testMessage, testErrorType, onTest }) {
   if (!provider) return null;
 
   return (
@@ -410,7 +416,14 @@ function StepEnterKey({ provider, apiKey, setApiKey, model, setModel, testStatus
           </span>
         )}
         {testStatus === "error" && (
-          <span className="text-sm text-red-600">{testMessage}</span>
+          <div className="text-sm text-red-600 space-y-1">
+            <span>{testMessage}</span>
+            {testErrorType === "model_not_found" && (
+              <p className="text-xs text-gray-500">
+                Tip: expand "Advanced: model override" below to pick an installed model.
+              </p>
+            )}
+          </div>
         )}
       </div>
 

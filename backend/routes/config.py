@@ -14,8 +14,13 @@ from backend.config_manager import (
     get_llm_config,
     get_integration_config
 )
-from backend.llm.llm_factory import create_llm_config
-from backend.llm.model_listing import list_models as _list_models, MODEL_LISTERS
+from backend.llm.llm_factory import create_llm_config, DEFAULT_MODELS
+from backend.llm.model_listing import (
+    list_models as _list_models,
+    MODEL_LISTERS,
+    is_ollama_running,
+    pick_best_ollama_model,
+)
 import litellm
 import logging
 
@@ -182,18 +187,56 @@ def test_connection():
         except Exception as e:
             logger.error(f"LLM connection test failed: {e}")
             error_message = str(e)
+            error_type = "unknown"
+
+            lower_msg = error_message.lower()
 
             # Provide more helpful error messages
-            if "authentication" in error_message.lower() or "api key" in error_message.lower():
+            if "authentication" in lower_msg or "api key" in lower_msg:
                 error_message = "Invalid API key"
-            elif "not found" in error_message.lower():
+                error_type = "auth_error"
+            elif provider == "ollama" and ("not found" in lower_msg or "404" in lower_msg):
+                # Ollama is reachable but the model isn't installed
+                resolved_model = model or DEFAULT_MODELS.get("ollama")
+                error_message = (
+                    f"Ollama is running, but the model '{resolved_model}' "
+                    f"was not found. Run `ollama pull {resolved_model}` or "
+                    f"select an installed model from the dropdown below."
+                )
+                error_type = "model_not_found"
+            elif provider == "ollama" and (
+                "connection" in lower_msg
+                or "connect" in lower_msg
+                or "refused" in lower_msg
+                or "unreachable" in lower_msg
+            ):
+                error_message = (
+                    "Could not connect to Ollama. Make sure Ollama is "
+                    "installed and running (check with `ollama list` in "
+                    "your terminal)."
+                )
+                error_type = "connection_failed"
+            elif "not found" in lower_msg:
                 error_message = "Provider or model not found"
-            elif "rate limit" in error_message.lower():
+                error_type = "not_found"
+            elif "rate limit" in lower_msg:
                 error_message = "Rate limit exceeded"
+                error_type = "rate_limit"
+            elif provider == "ollama":
+                # For any other Ollama error, check if server is reachable
+                # to give a more targeted message
+                if not is_ollama_running():
+                    error_message = (
+                        "Could not connect to Ollama. Make sure Ollama is "
+                        "installed and running (check with `ollama list` in "
+                        "your terminal)."
+                    )
+                    error_type = "connection_failed"
 
             return jsonify({
                 "success": False,
-                "error": error_message
+                "error": error_message,
+                "error_type": error_type,
             }), 400
 
     except Exception as e:
@@ -255,6 +298,9 @@ def get_providers():
     Returns:
         JSON response with provider information
     """
+    # Determine best available Ollama model dynamically
+    ollama_default = pick_best_ollama_model() or DEFAULT_MODELS.get("ollama")
+
     providers = [
         {
             "id": "anthropic",
@@ -277,7 +323,7 @@ def get_providers():
         {
             "id": "ollama",
             "name": "Ollama (Local)",
-            "default_model": "llama3.1",
+            "default_model": ollama_default,
             "requires_api_key": False
         }
     ]

@@ -105,9 +105,9 @@ def _apply_migrations(app):
 
     Handles three scenarios:
     1. Fresh database (no tables) — run all migrations from scratch.
-    2. Pre-migration database (tables exist, no alembic_version) — stamp at
-       the initial baseline, then upgrade to apply newer migrations.
-    3. Normal database (alembic_version exists) — just run upgrade().
+    2. Pre-migration database (tables exist, no alembic_version tracking) —
+       stamp at the initial baseline, then upgrade to apply newer migrations.
+    3. Normal database (alembic_version exists and populated) — just upgrade().
 
     Falls back to db.create_all() if the migrations directory doesn't exist
     (development convenience).
@@ -122,8 +122,15 @@ def _apply_migrations(app):
 
     inspector = db.inspect(db.engine)
     existing_tables = set(inspector.get_table_names())
+    has_app_tables = bool(existing_tables - {"alembic_version"})
 
-    if "alembic_version" not in existing_tables and existing_tables:
+    # Check if Alembic is already tracking this database
+    has_version = False
+    if "alembic_version" in existing_tables:
+        row = db.session.execute(db.text("SELECT version_num FROM alembic_version")).first()
+        has_version = row is not None
+
+    if has_app_tables and not has_version:
         # Pre-migration database: tables exist but no migration tracking.
         # Stamp at the initial baseline so only newer migrations run.
         _logger.info("Pre-migration database detected — stamping baseline")

@@ -116,15 +116,10 @@ CREATE TABLE "search_results" (
 
 
 def upgrade():
-    # Temporarily disable FK checks during table recreation
-    op.execute("PRAGMA foreign_keys=OFF")
     _recreate_table('messages', _MESSAGES_NEW, _MESSAGES_COLS)
     _recreate_table('search_results', _SEARCH_RESULTS_NEW, _SEARCH_RESULTS_COLS)
-    op.execute("PRAGMA foreign_keys=ON")
 
 
 def downgrade():
-    op.execute("PRAGMA foreign_keys=OFF")
     _recreate_table('search_results', _SEARCH_RESULTS_OLD, _SEARCH_RESULTS_COLS)
     _recreate_table('messages', _MESSAGES_OLD, _MESSAGES_COLS)
-    op.execute("PRAGMA foreign_keys=ON")

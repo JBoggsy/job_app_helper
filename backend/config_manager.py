@@ -248,13 +248,19 @@ def get_integration_config() -> Dict[str, Optional[str]]:
     Returns:
         Dictionary with all integration API keys
     """
+    # Support short env var alias SEARCH_API_KEY in addition to the
+    # auto-mapped INTEGRATIONS_SEARCH_API_KEY (all docs use the short form).
+    search_api_key = (
+        get_config_value("integrations.search_api_key")
+        or os.getenv("SEARCH_API_KEY")
+    )
     # Support legacy jsearch_api_key field as fallback for rapidapi_key
     rapidapi_key = (
         get_config_value("integrations.rapidapi_key")
         or get_config_value("integrations.jsearch_api_key")
     )
     return {
-        "search_api_key": get_config_value("integrations.search_api_key"),
+        "search_api_key": search_api_key,
         "rapidapi_key": rapidapi_key,
     }
 

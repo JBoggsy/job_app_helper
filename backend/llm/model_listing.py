@@ -109,14 +109,15 @@ def is_ollama_running(base_url: str = "http://localhost:11434") -> bool:
 
 
 # Ranked list of known high-quality Ollama models, in descending preference.
-# Entries are matched as prefixes against the model id (before the ":" tag).
+# Entries are matched by exact equality against the model name (before the ":" tag).
 _PREFERRED_OLLAMA_MODELS = [
     "llama3.3",
     "llama3.1",
-    "llama3.2",
+    "qwen3.5",
     "qwen3",
     "qwen2.5",
     "gemma3",
+    "llama3.2",
     "deepseek-r1",
     "mistral",
     "phi4",

@@ -116,8 +116,16 @@ class UnifyResumeSig(dspy.Signature):
       (e.g. ``## Work Experience``, ``## Education``, ``## Skills``).
     - Use ``**bold**`` for job titles, company names, and degree names.
     - Use bullet lists (``- item``) for experience highlights and skills.
-    - Use sub-categories with bold labels for the Skills section
-      (e.g. ``**Languages:** Python, C++, ...``).
+    - For the Skills section, put each category on its own bullet line
+      with a bold label.  Do NOT combine categories into one paragraph.
+      Example::
+
+        ## Skills
+        - **Languages:** Python, Java, C++
+        - **Frameworks:** Django, Flask, React
+        - **Databases:** PostgreSQL, MongoDB
+        - **Tools:** Docker, Git, CI/CD
+
     - Do NOT use plain-text separator lines (━━━, ---, ===) — headings
       provide sufficient visual structure.
     - The candidate's name should be a level-1 heading (``# Name``).

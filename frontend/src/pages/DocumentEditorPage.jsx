@@ -106,7 +106,7 @@ export default function DocumentEditorPage() {
     setHasChanges(html !== savedContentRef.current);
   }, []);
 
-  async function handleSave() {
+  const handleSave = useCallback(async () => {
     if (!currentContentRef.current.trim()) return;
     setSaving(true);
     try {
@@ -122,7 +122,7 @@ export default function DocumentEditorPage() {
     } finally {
       setSaving(false);
     }
-  }
+  }, [id, docType]);
 
   async function handleViewVersion(version) {
     const html = ensureHtml(version.content || "");
@@ -161,17 +161,16 @@ export default function DocumentEditorPage() {
     });
   }
 
-  function handleKeyDown(e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-      e.preventDefault();
-      if (hasChanges) handleSave();
-    }
-  }
-
   useEffect(() => {
+    function handleKeyDown(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (hasChanges) handleSave();
+      }
+    }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [hasChanges]);
+  }, [hasChanges, handleSave]);
 
   if (loading) {
     return (

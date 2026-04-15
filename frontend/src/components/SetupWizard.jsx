@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchModels, updateConfig, testConnection } from '../api';
+import { fetchModels, updateConfig, testConnection, fetchProviders } from '../api';
 import ModelCombobox from './ModelCombobox';
 
 const PROVIDERS = [
@@ -159,13 +159,20 @@ export default function SetupWizard({ isOpen, onClose, onComplete }) {
     let cancelled = false;
     setOllamaModelsLoading(true);
 
-    fetchModels("ollama")
-      .then((data) => {
+    Promise.all([
+      fetchModels("ollama"),
+      fetchProviders().catch(() => []),
+    ])
+      .then(([data, providers]) => {
         if (cancelled || data.error) return;
         const modelIds = (data.models || []).map((entry) => entry.id).filter(Boolean);
         setOllamaModels(modelIds);
         if (!model && modelIds.length > 0) {
-          setModel(modelIds[0]);
+          // Use the smart default from providers endpoint (e.g. qwen3.5:35b)
+          // which ranks models by quality, rather than picking alphabetically
+          const ollamaProvider = (providers || []).find((p) => p.id === "ollama");
+          const bestModel = ollamaProvider?.default_model;
+          setModel(bestModel && modelIds.includes(bestModel) ? bestModel : modelIds[0]);
         }
       })
       .catch(() => {

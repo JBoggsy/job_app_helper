@@ -5,6 +5,7 @@ import ChatPanel from "./components/ChatPanel";
 import UpdateBanner from "./components/UpdateBanner";
 import SetupWizard from "./components/SetupWizard";
 import { ToastContainer } from "./components/Toast";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { useAppContext } from "./contexts/AppContext";
 import { fetchOnboardingStatus, fetchHealth } from "./api";
 
@@ -120,20 +121,22 @@ function App() {
       )}
       <NavigationBar />
       <main className="max-w-6xl mx-auto px-4 py-8">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/jobs" element={<JobTrackerPage />} />
-          <Route path="/jobs/:id" element={<JobDetailPage />} />
-          <Route path="/jobs/:id/documents/:type" element={
-            <Suspense fallback={<div className="flex items-center justify-center h-64"><span className="inline-block w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /></div>}>
-              <DocumentEditorPage />
-            </Suspense>
-          } />
-          <Route path="/settings" element={<SettingsPage onSaved={handleSettingsSaved} />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/help" element={<HelpPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/jobs" element={<JobTrackerPage />} />
+            <Route path="/jobs/:id" element={<JobDetailPage />} />
+            <Route path="/jobs/:id/documents/:type" element={
+              <Suspense fallback={<div className="flex items-center justify-center h-64"><span className="inline-block w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /></div>}>
+                <DocumentEditorPage />
+              </Suspense>
+            } />
+            <Route path="/settings" element={<SettingsPage onSaved={handleSettingsSaved} />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/help" element={<HelpPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
       <ChatPanel
         isOpen={chatOpen}
